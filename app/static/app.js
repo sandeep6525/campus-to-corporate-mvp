@@ -27,7 +27,7 @@ async function fetchCurrentUser() {
     currentUserId = data.user_id;
     currentUserRole = data.role;
     document.getElementById("user-display-name").textContent = data.username;
-    
+
     const roleSelect = document.getElementById("persona-switch");
     roleSelect.value = currentUserRole;
   } catch (err) {
@@ -97,7 +97,7 @@ function setupEventListeners() {
   document.getElementById("interview-record-audio-btn").addEventListener("click", () => startMediaRecording("audio"));
   document.getElementById("interview-record-video-btn").addEventListener("click", () => startMediaRecording("video"));
   document.getElementById("interview-stop-record-btn").addEventListener("click", stopMediaRecording);
-  
+
   // Return setup mock button
   document.getElementById("return-setup-btn").addEventListener("click", () => {
     document.getElementById("mock-report-workspace").classList.add("hidden");
@@ -109,7 +109,7 @@ function setupEventListeners() {
 function loadActiveTab(tabName) {
   const tabs = document.querySelectorAll(".workspace-tab");
   tabs.forEach(t => t.classList.remove("active"));
-  
+
   const targetTab = document.getElementById(`tab-${tabName}`);
   if (targetTab) {
     targetTab.classList.add("active");
@@ -159,7 +159,7 @@ function adjustRoleVisibilities() {
   if (emplMenu) emplMenu.remove();
 
   const nav = document.querySelector(".nav-menu");
-  
+
   if (role === "Mentor") {
     nav.insertAdjacentHTML("beforeend", `
       <button class="nav-item temp-menu" data-tab="mentor-desk">
@@ -220,7 +220,7 @@ async function loadDashboardPayload() {
         document.getElementById("dashboard-ccq-val").textContent = latestSnapshot.CCQ || "--";
         document.getElementById("dashboard-res-val").textContent = latestSnapshot.total_score || "--";
         document.getElementById("dashboard-base-val").textContent = latestSnapshot.total_score || "--";
-        
+
         // update cgi
         document.getElementById("cgi-val").textContent = `${latestSnapshot.total_score - context.confidence_baseline}%`;
         document.getElementById("rv-val").textContent = "3 days";
@@ -281,7 +281,7 @@ function loadPlanChecklist(procs) {
         </div>
       </div>
     `;
-    
+
     gapsContainer.innerHTML = `
       <div class="gap-item-card">
         <div class="gap-header">
@@ -363,7 +363,7 @@ async function loadSkillsHubPayload() {
           <td><a href="${c.file_url || '#'}" target="_blank" class="small-text text-blue">View Certificate</a></td>
         </tr>
       `).join("");
-      
+
       // Update completeness score indicators
       document.getElementById("pcs-val").textContent = `${Math.min(100, certs.length * 25)}%`;
     } else {
@@ -418,7 +418,7 @@ async function addLearnerSkill() {
   const category = document.getElementById("skill-category").value;
   const proficiency = document.getElementById("skill-proficiency").value;
   if (!name.strip()) return;
-  
+
   try {
     await fetch("/api/learner/skills", {
       method: "POST",
@@ -532,7 +532,7 @@ async function calculateCareerShift() {
       body: JSON.stringify({ target_role: targetRole, shift_reason: reason })
     });
     const data = await res.json();
-    
+
     const panel = document.getElementById("shift-results-panel");
     panel.classList.remove("hidden");
     panel.innerHTML = `
@@ -574,7 +574,14 @@ async function initializeMockInterview() {
     const res = await fetch("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_name: name, target_role: role, experience_level: "Fresher", difficulty: diff, interviewer_avatar: avatar })
+      body: JSON.stringify({
+        user_name: name,
+        target_role: role,
+        experience_level: "Fresher",
+        difficulty: diff,
+        interview_track: track,
+        interviewer_avatar: avatar
+      })
     });
     const session = await res.json();
     activeInterviewSessionId = session.session_id;
@@ -628,7 +635,7 @@ async function loadNextMockQuestion() {
   try {
     const res = await fetch(`/api/sessions/${activeInterviewSessionId}/current-question`);
     const q = await res.json();
-    
+
     if (q.completed) {
       // Completed, load report
       ws.close();
@@ -637,7 +644,7 @@ async function loadNextMockQuestion() {
     }
 
     currentQuestionId = q.question_id;
-    
+
     // Add question bubble
     const dialogue = document.getElementById("dialogue-box");
     dialogue.insertAdjacentHTML("beforeend", `
@@ -775,7 +782,7 @@ async function loadLmsAcademyPayload() {
   try {
     const res = await fetch("/api/lms/courses");
     const courses = await res.json();
-    
+
     const tree = document.getElementById("lms-syllabus-tree");
     if (courses && courses.length > 0) {
       const course = courses[0];
@@ -805,7 +812,7 @@ async function loadLmsLecture(courseId, lectureId, title) {
     const res = await fetch("/api/lms/courses");
     const courses = await res.json();
     const course = courses.find(c => c.id === courseId);
-    
+
     let lecture = null;
     for (const m of course.modules) {
       const found = m.lectures.find(l => l.id === lectureId);
@@ -853,7 +860,7 @@ async function loadLmsDiscussionPosts(courseId) {
   try {
     const res = await fetch(`/api/lms/courses/${courseId}/posts`);
     const posts = await res.json();
-    
+
     const container = document.getElementById("lms-posts-container");
     if (posts && posts.length > 0) {
       container.innerHTML = posts.map(p => `
@@ -890,7 +897,7 @@ async function loadGlobalCoursesPayload() {
   try {
     const res = await fetch("/api/courses/campus");
     const courses = await res.json();
-    
+
     const grid = document.getElementById("global-courses-grid");
     if (courses && courses.length > 0) {
       grid.innerHTML = courses.map(c => `
@@ -920,7 +927,7 @@ async function loadJobsPayload() {
   try {
     const res = await fetch("/api/jobs");
     const jobs = await res.json();
-    
+
     const grid = document.getElementById("job-openings-grid");
     if (jobs && jobs.length > 0) {
       grid.innerHTML = jobs.map(j => `
@@ -949,7 +956,7 @@ async function loadAppointmentsPayload() {
   try {
     const res = await fetch("/api/mentorship/appointments");
     const appts = await res.json();
-    
+
     const container = document.getElementById("booked-appointments-list");
     if (appts && appts.length > 0) {
       container.innerHTML = appts.map(a => `
@@ -996,7 +1003,7 @@ async function loadCyberSecurityPayload() {
   try {
     const resLogs = await fetch("/api/admin/security-logs");
     const logs = await resLogs.json();
-    
+
     const tbody = document.getElementById("security-logs-tbody");
     if (logs && logs.length > 0) {
       tbody.innerHTML = logs.map(l => `
@@ -1062,7 +1069,7 @@ async function loadFrameworkPayload(subtab) {
   try {
     const res = await fetch("/api/framework");
     const data = await res.json();
-    
+
     if (subtab === "flow") {
       infoPane.innerHTML = `
         <div class="flex-column gap">
@@ -1160,7 +1167,7 @@ async function loadMentorDeskPayload() {
   try {
     const resHitl = await fetch("/api/admin/hitl-queue");
     const hitl = await resHitl.json();
-    
+
     const container = document.getElementById("mentor-hitl-queue");
     if (hitl && hitl.length > 0) {
       container.innerHTML = hitl.map(h => `
@@ -1187,7 +1194,7 @@ async function loadMentorDeskPayload() {
 async function resolveHitlTask(hitlId) {
   const notes = prompt("Enter reviewer notes/decision remarks:");
   if (notes === null) return;
-  
+
   try {
     const formData = new FormData();
     formData.append("reviewer_notes", notes);
@@ -1324,7 +1331,7 @@ async function submitOnboardDiagnostics() {
 async function startMediaRecording(type) {
   mediaType = type;
   recordedChunks = [];
-  
+
   const constraints = {
     audio: true,
     video: type === "video" ? { width: 320, height: 240 } : false
@@ -1333,7 +1340,7 @@ async function startMediaRecording(type) {
   try {
     const stream = await navigator.mediaDevices.getUserMedia(constraints);
     mediaRecorder = new MediaRecorder(stream);
-    
+
     mediaRecorder.ondataavailable = (e) => {
       if (e.data && e.data.size > 0) {
         recordedChunks.push(e.data);
@@ -1343,10 +1350,10 @@ async function startMediaRecording(type) {
     mediaRecorder.onstop = () => {
       const blob = new Blob(recordedChunks, { type: type === "video" ? "video/webm" : "audio/wav" });
       const url = URL.createObjectURL(blob);
-      
+
       const preview = document.getElementById("dialogue-media-preview");
       preview.classList.remove("hidden");
-      
+
       if (type === "video") {
         preview.innerHTML = `<video src="${url}" controls style="width:200px; border-radius:6px;"></video>`;
       } else {
@@ -1371,10 +1378,10 @@ function stopMediaRecording() {
     mediaRecorder.stop();
     mediaRecorder.stream.getTracks().forEach(t => t.stop());
   }
-  
+
   document.getElementById("interview-stop-record-btn").classList.add("hidden");
   document.getElementById("interview-recording-label").classList.add("hidden");
-  
+
   // Auto package response text
   document.getElementById("interview-response-text").value = `Recorded spoken response (${mediaType}) ready to sync.`;
   document.getElementById("interview-record-audio-btn").classList.remove("hidden");
@@ -1382,6 +1389,6 @@ function stopMediaRecording() {
 }
 
 // --- HELPER PROTOTYPES ---
-String.prototype.strip = function() {
+String.prototype.strip = function () {
   return this.trim();
 };

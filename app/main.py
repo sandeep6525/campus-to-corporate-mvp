@@ -890,7 +890,12 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
     db.refresh(interview_session)
 
     # Exposes Interview track to generator
-    questions = generate_questions(payload.target_role, payload.experience_level, payload.difficulty, payload.interviewer_avatar)
+    questions = generate_questions(
+    payload.target_role,
+    payload.experience_level,
+    payload.difficulty,
+    payload.interview_track
+    )
     for idx, text in enumerate(questions, start=1):
         db.add(Question(session_id=interview_session.id, order_no=idx, text=text))
 

@@ -1,12 +1,12 @@
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any
 
-
 class CreateSessionRequest(BaseModel):
     user_name: str = Field(min_length=1, max_length=120)
     target_role: str = Field(min_length=1, max_length=120)
     experience_level: str = Field(min_length=1, max_length=60)
     difficulty: str = Field(default="medium")
+    interview_track: str = Field(default="HR & Behavioral")
     interviewer_avatar: str = Field(default="Sophia")
 
 
