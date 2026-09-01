@@ -1,0 +1,995 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AspireOS - ReadyFlow AI Readiness Operating System</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="dark-mode">
+  <div class="app-layout">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo">
+          <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+          </svg>
+          <span class="brand-text">Aspire<span class="highlight">OS</span></span>
+        </div>
+        <span class="tagline">ReadyFlow AI</span>
+      </div>
+
+      <div class="user-role-selector">
+        <label for="persona-switch">Active Persona</label>
+        <select id="persona-switch">
+          <option value="Learner">Learner Dashboard</option>
+          <option value="Mentor">Mentor Console</option>
+          <option value="Institution">Institution Board</option>
+          <option value="Employer">Employer Portal</option>
+        </select>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="dashboard">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+          <span>Dashboard</span>
+        </button>
+        <button class="nav-item" data-tab="skills-hub">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+          <span>Skills & Credentials</span>
+        </button>
+        <button class="nav-item" data-tab="mock-interview">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          <span>Mock Interviews</span>
+        </button>
+        <button class="nav-item" data-tab="lms-academy">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 15V3a2 2 0 0 1 2-2h14v16H6.5M4 19.5H6.5"/></svg>
+          <span>Asperion LMS</span>
+        </button>
+        <button class="nav-item" data-tab="global-courses">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+          <span>Global Courses</span>
+        </button>
+        <button class="nav-item" data-tab="job-board">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <span>Jobs & Openings</span>
+        </button>
+        <button class="nav-item" data-tab="appointments">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+          <span>1-on-1 Mentorship</span>
+        </button>
+        <button class="nav-item" data-tab="cyber-security">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span>Security & Policy</span>
+        </button>
+        <button class="nav-item" data-tab="framework-ref">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          <span>Framework Map</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="connection-status">
+          <span class="dot pulse green"></span>
+          <span>Online / Cached Cache</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Workspace Content -->
+    <main class="main-content">
+      
+      <!-- Top header bar -->
+      <header class="top-bar">
+        <div class="search-bar">
+          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input type="text" id="search-input" placeholder="Search career pathways, LMS courses, security threat logs..." />
+        </div>
+        <div class="top-bar-actions">
+          <div class="sync-status">
+            <span class="pill-indicator pill-green">Local Encryption (AES-256) Enabled</span>
+          </div>
+          <div class="profile-chip">
+            <span class="avatar-letter">L</span>
+            <span id="user-display-name">fresha_aspirant</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Tab Workspace: Dashboard -->
+      <section class="workspace-tab active" id="tab-dashboard">
+        <div class="row between wrap margin-bottom">
+          <div>
+            <h1 class="page-title">Dream-to-Readiness Hub</h1>
+            <p class="muted">Evidence-based competency diagnostics, Context-Adjusted scorecards, and transferable career mappings.</p>
+          </div>
+          <div class="row gap">
+            <button id="trigger-onboard-modal" class="primary-btn">Start Onboarding Form</button>
+          </div>
+        </div>
+
+        <!-- Before-vs-After Comparison, Scorecard, and Plan grids -->
+        <div class="grid grid-3 gap">
+          
+          <!-- Scorecard gauges card -->
+          <div class="card glass shadow flex-column">
+            <h3 class="card-title">CARI Scorecard Gauges</h3>
+            <p class="muted margin-bottom">Self-reported baseline vs actual Context-Adjusted Readiness Index (CARI).</p>
+            <div class="scorecard-radial-wrapper flex-center flex-column">
+              <div class="radial-gauge" id="scorecard-cari-gauge">
+                <span class="gauge-value" id="dashboard-cari-val">--</span>
+                <span class="gauge-label">CARI</span>
+              </div>
+              <div class="row wrap gap margin-top">
+                <div class="metric-chip">CCQ: <strong id="dashboard-ccq-val">--</strong></div>
+                <div class="metric-chip">Resilience: <strong id="dashboard-res-val">--</strong></div>
+                <div class="metric-chip">Baseline: <strong id="dashboard-base-val">--</strong></div>
+              </div>
+            </div>
+            <div class="scorecard-details-list margin-top" id="scorecard-layers-list">
+              <p class="muted text-center">Complete onboarding diagnostic to view details.</p>
+            </div>
+          </div>
+
+          <!-- Before-vs-After Progress comparison -->
+          <div class="card glass shadow flex-column">
+            <h3 class="card-title">Before vs After Progress</h3>
+            <p class="muted margin-bottom">Diagnostic snapshot comparison matrix since platform enrollment.</p>
+            <div class="progress-comparison-chart flex-column gap" id="progress-comparison-pane">
+              <p class="muted text-center py-4">No diagnostic history available. Please diagnose baseline scorecard first.</p>
+            </div>
+            <div class="margin-top pt-3 border-top flex-column gap">
+              <div class="row between"><span class="small-text">Confidence Gain Index (CGI):</span><strong id="cgi-val">0%</strong></div>
+              <div class="row between"><span class="small-text">Remediation Velocity (RV):</span><strong id="rv-val">0 days</strong></div>
+              <div class="row between"><span class="small-text">Portfolio Completeness (PCS):</span><strong id="pcs-val">0%</strong></div>
+            </div>
+          </div>
+
+          <!-- Career Shift Capability Matrix -->
+          <div class="card glass shadow flex-column">
+            <h3 class="card-title">Career Shift & Capability Matrix</h3>
+            <p class="muted margin-bottom">Map transferable capabilities and remediate skill deficits when switching directions.</p>
+            <div class="career-shift-form flex-column gap">
+              <label class="form-label">
+                <span>Select Target Stream</span>
+                <select id="shift-target-stream" class="select-input">
+                  <option value="Engineering and Technology">Engineering Track</option>
+                  <option value="Management and Business">Management Track</option>
+                  <option value="Healthcare and Life Sciences">Healthcare Track</option>
+                </select>
+              </label>
+              <label class="form-label">
+                <span>Target Career Shift Role</span>
+                <input type="text" id="shift-target-role" class="text-input" placeholder="e.g. Full Stack Developer" />
+              </label>
+              <label class="form-label">
+                <span>Reason for Shifting Pathway</span>
+                <textarea id="shift-reason" class="textarea-input" rows="2" placeholder="e.g. Higher growth opportunities, better skill alignment..."></textarea>
+              </label>
+              <button id="calculate-shift-btn" class="secondary-btn">Process Capability Matrix</button>
+            </div>
+            <div id="shift-results-panel" class="margin-top hidden"></div>
+          </div>
+        </div>
+
+        <div class="grid grid-2 gap margin-top">
+          <!-- 30/60/90 Day learning plan checklist -->
+          <div class="card glass shadow">
+            <h3 class="card-title">30/60/90 Day Learning Roadmaps</h3>
+            <p class="muted margin-bottom">Personalized milestones automatically synchronized based on diagnosed gaps.</p>
+            <div class="roadmap-checklist-container" id="dashboard-roadmap-tasks">
+              <p class="muted">No learning plan found. Please generate readiness plan.</p>
+            </div>
+          </div>
+
+          <!-- Gaps & Root Cause report -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Remediation & Gap Report</h3>
+            <p class="muted margin-bottom">Identified readiness deficiencies, symptoms, and targeted fixes.</p>
+            <div class="gap-reports-container" id="dashboard-gaps-list">
+              <p class="muted">No gaps identified yet.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Proceedings Timeline Audit Ledger -->
+        <div class="card glass shadow margin-top">
+          <h3 class="card-title">Analytical Proceedings Timeline</h3>
+          <p class="muted margin-bottom">Chronological audit ledger recording all diagnostic scorecards, career decisions, and milestones.</p>
+          <div class="proceedings-timeline-wrapper" id="dashboard-proceedings-timeline">
+            <p class="muted">Audit ledger empty.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Skills & Credentials Hub -->
+      <section class="workspace-tab" id="tab-skills-hub">
+        <h1 class="page-title">Skills & Credentials Hub</h1>
+        <p class="muted margin-bottom">Manage Technical and Non-Technical skills, upload certs, and connect GitHub / LinkedIn links.</p>
+
+        <div class="grid grid-3 gap">
+          
+          <!-- Skills registry -->
+          <div class="card glass shadow flex-column">
+            <h3 class="card-title">Active Competencies</h3>
+            <p class="muted margin-bottom">Add technical and non-technical skills. Stream suggestions are loaded on the right.</p>
+            <div class="flex-column gap">
+              <label class="form-label">
+                <span>Skill Name</span>
+                <input type="text" id="skill-name" class="text-input" placeholder="e.g. Python Programming" />
+              </label>
+              <div class="grid grid-2 gap">
+                <label class="form-label">
+                  <span>Category</span>
+                  <select id="skill-category" class="select-input">
+                    <option value="Technical">Technical</option>
+                    <option value="Non-Technical">Non-Technical</option>
+                  </select>
+                </label>
+                <label class="form-label">
+                  <span>Proficiency</span>
+                  <select id="skill-proficiency" class="select-input">
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate" selected>Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                </label>
+              </div>
+              <button id="add-skill-btn" class="primary-btn">Add Skill Profile</button>
+            </div>
+            <div class="margin-top">
+              <h4>Registered Skills</h4>
+              <div class="skills-chips-wrapper" id="skills-registry-list">
+                <p class="muted">No skills registered yet.</p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Suggested skills stream-specific -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Suggested Core Skills</h3>
+            <p class="muted margin-bottom">Highly demanded capabilities recommended based on your stream.</p>
+            <div class="suggested-skills-list flex-column gap" id="skills-suggested-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Certifications file upload & links sync -->
+          <div class="card glass shadow flex-column">
+            <h3 class="card-title">Certificates & Integrations</h3>
+            <p class="muted margin-bottom">Upload scanned certificates (PDF/PNG) and connect GitHub/LinkedIn links to verify evidence.</p>
+            
+            <form id="cert-upload-form" class="flex-column gap pb-4 border-bottom">
+              <label class="form-label">
+                <span>Certification Title</span>
+                <input type="text" id="cert-title" class="text-input" placeholder="e.g. AWS Developer Associate" required />
+              </label>
+              <div class="grid grid-2 gap">
+                <label class="form-label">
+                  <span>Issuing Body</span>
+                  <input type="text" id="cert-issuer" class="text-input" placeholder="e.g. Amazon Web Services" required />
+                </label>
+                <label class="form-label">
+                  <span>Credential ID</span>
+                  <input type="text" id="cert-id" class="text-input" placeholder="e.g. AWS-12345" />
+                </label>
+              </div>
+              <label class="form-label">
+                <span>Upload Scanned File (PDF/PNG/JPEG)</span>
+                <input type="file" id="cert-file" class="file-input" accept=".pdf,.png,.jpeg,.jpg" required />
+              </label>
+              <button type="submit" class="secondary-btn">Upload Certification</button>
+            </form>
+
+            <div class="margin-top pt-3">
+              <h4>Synced External Profile Links</h4>
+              <div class="flex-column gap">
+                <label class="form-label">
+                  <span>GitHub Profile URL</span>
+                  <input type="text" id="link-github" class="text-input" placeholder="https://github.com/username" />
+                </label>
+                <label class="form-label">
+                  <span>LinkedIn Professional URL</span>
+                  <input type="text" id="link-linkedin" class="text-input" placeholder="https://linkedin.com/in/username" />
+                </label>
+                <button id="sync-links-btn" class="primary-btn">Save External Profiles</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card glass shadow margin-top">
+          <h3 class="card-title">Verified Certifications Registry</h3>
+          <p class="muted margin-bottom">List of scanned certifications uploaded. Auto-updates scorecard portfolio indicators.</p>
+          <div class="certifications-table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Title</th>
+                  <th>Issuer</th>
+                  <th>Credential ID</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="certifications-table-body">
+                <tr><td colspan="5" class="text-center muted">No certifications uploaded yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Mock Interview Suite -->
+      <section class="workspace-tab" id="tab-mock-interview">
+        <h1 class="page-title">Interactive Mock Interview Suite</h1>
+        <p class="muted margin-bottom">Complete selectable tracks, custom interviewer avatars, a splits coding sandbox panel, and lexical behavioral KPIs.</p>
+
+        <!-- SETUP SCREEN -->
+        <div class="card glass shadow" id="mock-setup-workspace">
+          <h3>Configure Mock Session</h3>
+          <div class="grid grid-2 gap margin-bottom">
+            <label class="form-label">
+              <span>Candidate Name</span>
+              <input type="text" id="interview-user-name" class="text-input" placeholder="Your Name" />
+            </label>
+            <label class="form-label">
+              <span>Target Role</span>
+              <input type="text" id="interview-target-role" class="text-input" placeholder="e.g. Software Engineer" />
+            </label>
+          </div>
+          <div class="grid grid-3 gap margin-bottom">
+            <label class="form-label">
+              <span>Difficulty Level</span>
+              <select id="interview-difficulty" class="select-input">
+                <option value="simple">Simple Mode</option>
+                <option value="medium" selected>Standard Medium</option>
+                <option value="high">Advanced High</option>
+                <option value="stress">Stress Test Mode</option>
+              </select>
+            </label>
+            <label class="form-label">
+              <span>Select Interview Track</span>
+              <select id="interview-track" class="select-input">
+                <option value="HR & Behavioral" selected>HR & Behavioral (STAR focused)</option>
+                <option value="Technical & DSA">Technical & DSA (Coding Sandbox active)</option>
+                <option value="Product PM Case">Product PM Case Study</option>
+                <option value="Leadership & Communication">Leadership & Comm</option>
+              </select>
+            </label>
+            <label class="form-label">
+              <span>Interviewer Avatar AI</span>
+              <select id="interview-avatar" class="select-input">
+                <option value="Sophia">Sophia (Empathetic & encouraging style)</option>
+                <option value="Alex">Alex (Rigorous lead architect style)</option>
+                <option value="Emma">Emma (Paced corporate HR style)</option>
+                <option value="Marcus">Marcus (Direct case strategist style)</option>
+              </select>
+            </label>
+          </div>
+          <button id="create-interview-btn" class="primary-btn">Initialize Interview Workspace</button>
+        </div>
+
+        <!-- MOCK INTERVIEW INTERACTIVE INTERFACE (Split layout) -->
+        <div class="interview-workspace-split hidden" id="mock-active-workspace">
+          
+          <!-- Code sandbox split editor panel (active for tech track) -->
+          <div class="card glass shadow code-sandbox-pane hidden" id="interview-code-sandbox">
+            <h3 class="card-title">Technical Code Editor Sandbox</h3>
+            <p class="muted margin-bottom">Write code solutions in Python or clean pseudocode. Evaluates complexity heuristics ($O(N)$, etc.) on submit.</p>
+            <div class="code-editor-textarea-wrapper">
+              <textarea id="sandbox-code-editor" class="code-editor-textarea" placeholder="# Enter clean, modular python code solution here...&#10;def solution(n):&#10;    # Write logic...&#10;    pass"></textarea>
+            </div>
+            <div class="margin-top row between">
+              <span class="pill-indicator pill-gray font-mono">Syntax: Python 3.x</span>
+              <button id="sandbox-check-syntax-btn" class="secondary-btn">Verify Compilation</button>
+            </div>
+            <div id="sandbox-syntax-msg" class="margin-top small-text font-mono"></div>
+          </div>
+
+          <!-- Spoken dialogue / Chat panel -->
+          <div class="card glass shadow dialogue-pane">
+            <div class="row between border-bottom pb-3 margin-bottom">
+              <div class="row gap">
+                <div class="avatar-thumbnail green" id="avatar-char">S</div>
+                <div>
+                  <h4 id="avatar-name">Sophia the HR Recruiter</h4>
+                  <span class="small-text green" id="avatar-status">Active Interview</span>
+                </div>
+              </div>
+              <div class="timer-display">
+                <span class="timer-label">Time Remaining:</span>
+                <span class="timer-value" id="interview-timer">30s</span>
+              </div>
+            </div>
+
+            <!-- Dialogue history -->
+            <div class="dialogue-box" id="dialogue-box">
+              <p class="system-msg">System initialized. Interviewer is preparing the first question...</p>
+            </div>
+
+            <!-- Response inputs -->
+            <div class="response-controls flex-column gap margin-top pt-3 border-top">
+              <textarea id="interview-response-text" class="textarea-input" rows="4" placeholder="Type your response here... (or record spoken audio)"></textarea>
+              <div class="row between wrap gap">
+                <div class="row gap">
+                  <button id="interview-record-audio-btn" class="secondary-btn">Record Audio</button>
+                  <button id="interview-record-video-btn" class="secondary-btn">Record Video</button>
+                  <button id="interview-stop-record-btn" class="secondary-btn hidden btn-red">Stop</button>
+                  <span id="interview-recording-label" class="recording-indicator hidden">Recording...</span>
+                </div>
+                <div class="row gap">
+                  <button id="interview-submit-btn" class="primary-btn">Submit Response</button>
+                </div>
+              </div>
+            </div>
+            <div id="dialogue-media-preview" class="margin-top hidden"></div>
+          </div>
+        </div>
+
+        <!-- MOCK INTERVIEW FEEDBACK & SCORECARD -->
+        <div class="interview-report-workspace hidden" id="mock-report-workspace">
+          
+          <div class="row between margin-bottom align-center">
+            <div>
+              <h2 class="section-title">Diagnostic Interview Scorecard</h2>
+              <p class="muted">Live evaluations of STAR structure, pacing speed, vocabulary keyword matches, and behavioral KPIs.</p>
+            </div>
+            <button id="return-setup-btn" class="secondary-btn">Close Session</button>
+          </div>
+
+          <div class="grid grid-4 gap margin-bottom">
+            <div class="metric-card shadow">
+              <span class="metric-label">Overall Competency</span>
+              <strong id="mock-score-overall" class="metric-value">--</strong>
+            </div>
+            <div class="metric-card shadow">
+              <span class="metric-label">Clarity Indicator</span>
+              <strong id="mock-score-clarity" class="metric-value">--</strong>
+            </div>
+            <div class="metric-card shadow">
+              <span class="metric-label">Confidence Indicator</span>
+              <strong id="mock-score-confidence" class="metric-value">--</strong>
+            </div>
+            <div class="metric-card shadow">
+              <span class="metric-label">Filler Word Incidents</span>
+              <strong id="mock-score-fillers" class="metric-value">--</strong>
+            </div>
+          </div>
+
+          <!-- Split layout: Behavioral KPI radar mock + Coding review -->
+          <div class="grid grid-2 gap">
+            
+            <!-- Behavioral radar KPIs -->
+            <div class="card glass shadow">
+              <h3 class="card-title">Behavioral & Attitude KPIs</h3>
+              <p class="muted margin-bottom">Evaluation of active attitude indicators based on lexical analysis of responses.</p>
+              <div class="behavioral-charts flex-column gap">
+                <div class="bar-progress-row">
+                  <div class="row between"><span class="small-text">Growth Mindset</span><strong id="kpi-growth">--</strong></div>
+                  <div class="bar-track"><div class="bar-fill green" id="fill-growth" style="width: 0%"></div></div>
+                </div>
+                <div class="bar-progress-row">
+                  <div class="row between"><span class="small-text">Ownership & Accountability</span><strong id="kpi-ownership">--</strong></div>
+                  <div class="bar-track"><div class="bar-fill green" id="fill-ownership" style="width: 0%"></div></div>
+                </div>
+                <div class="bar-progress-row">
+                  <div class="row between"><span class="small-text">Collaborative Empathy</span><strong id="kpi-empathy">--</strong></div>
+                  <div class="bar-track"><div class="bar-fill green" id="fill-empathy" style="width: 0%"></div></div>
+                </div>
+                <div class="bar-progress-row">
+                  <div class="row between"><span class="small-text">Stress Resilience</span><strong id="kpi-resilience">--</strong></div>
+                  <div class="bar-track"><div class="bar-fill green" id="fill-resilience" style="width: 0%"></div></div>
+                </div>
+                <div class="bar-progress-row">
+                  <div class="row between"><span class="small-text">Professional Integrity</span><strong id="kpi-integrity">--</strong></div>
+                  <div class="bar-track"><div class="bar-fill green" id="fill-integrity" style="width: 0%"></div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Technical Complexity feedback (shown if code submitted) -->
+            <div class="card glass shadow" id="mock-code-feedback-card">
+              <h3 class="card-title">Static Code Analysis & Complexity Report</h3>
+              <p class="muted margin-bottom">Evaluation of time-space complexities, modular formatting, and compile-safety.</p>
+              <div class="flex-column gap pt-2" id="code-feedback-pane">
+                <p class="muted">No technical code submitted during this mock session.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="grid grid-2 gap margin-top">
+            <div class="card glass shadow">
+              <h3 class="card-title">Identified Strengths</h3>
+              <ul id="mock-strengths-list" class="report-bullets green-bullets">
+                <!-- Dynamically populated -->
+              </ul>
+            </div>
+            <div class="card glass shadow">
+              <h3 class="card-title">Development Opportunities</h3>
+              <ul id="mock-improvements-list" class="report-bullets red-bullets">
+                <!-- Dynamically populated -->
+              </ul>
+            </div>
+          </div>
+
+          <div class="card glass shadow margin-top">
+            <h3>Detailed Spoken Transcript Log</h3>
+            <div class="transcript-items flex-column gap margin-top" id="mock-transcript-items">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Asperion Internal LMS -->
+      <section class="workspace-tab" id="tab-lms-academy">
+        <h1 class="page-title">Asperion Academy</h1>
+        <p class="muted margin-bottom">Access worksheets, success mantras, module curricula, and student peer collaborative boards.</p>
+        
+        <div class="lms-academy-layout">
+          <!-- Left side syllabus tree -->
+          <div class="card glass shadow lms-sidebar">
+            <h3 class="card-title">Course Curriculum</h3>
+            <div class="lms-syllabus-tree" id="lms-syllabus-tree">
+              <!-- Populated dynamically -->
+            </div>
+          </div>
+
+          <!-- Right side lecture player -->
+          <div class="lms-player-wrapper">
+            <div class="card glass shadow lms-player-card" id="lms-lecture-player">
+              <div class="py-5 text-center flex-column flex-center gap">
+                <svg class="nav-icon py-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 48px; height: 48px;"><path d="M4 15V3a2 2 0 0 1 2-2h14v16H6.5M4 19.5H6.5"/></svg>
+                <h3>Asperion LMS Player</h3>
+                <p class="muted">Select a lecture from the curriculum sidebar to load text, worksheets, and mantras.</p>
+              </div>
+            </div>
+
+            <!-- Student peer collaboration posts -->
+            <div class="card glass shadow margin-top">
+              <h3 class="card-title">Course Discussion Board</h3>
+              <p class="muted margin-bottom">Collaborate with peers, share notes, and clarify program milestones.</p>
+              
+              <div class="lms-posts-list flex-column gap margin-bottom" id="lms-posts-container" style="max-height: 250px; overflow-y: auto;">
+                <p class="muted text-center py-3">No collaboration posts yet. Be the first to start a thread!</p>
+              </div>
+
+              <div class="row gap align-center">
+                <input type="text" id="lms-new-post-text" class="text-input" placeholder="Type collaboration query..." />
+                <button id="lms-post-submit-btn" class="primary-btn">Post Thread</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Global & Campus Courses -->
+      <section class="workspace-tab" id="tab-global-courses">
+        <h1 class="page-title">Global & Campus Courses Catalog</h1>
+        <p class="muted margin-bottom">Recommended free and paid courses across Tier 1, Tier 2, and Tier 3 colleges in India and abroad.</p>
+        
+        <div class="grid grid-2 gap" id="global-courses-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Jobs & Openings -->
+      <section class="workspace-tab" id="tab-job-board">
+        <h1 class="page-title">Aggregated Opportunities Hub</h1>
+        <p class="muted margin-bottom">Match scorecard dimensions against corporate, government, local, national, and international openings.</p>
+        
+        <div class="grid grid-2 gap margin-bottom">
+          <div class="metric-card flex-row gap align-center">
+            <svg class="logo-icon text-green" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px;"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+            <div>
+              <span class="metric-label">National Opportunities Map</span>
+              <strong class="small-text">Active portal links mapping 12+ domains</strong>
+            </div>
+          </div>
+          <div class="metric-card flex-row gap align-center">
+            <svg class="logo-icon text-blue" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width: 32px;"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+            <div>
+              <span class="metric-label">International Opportunities Map</span>
+              <strong class="small-text">Bilateral certifications mapped</strong>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-column gap" id="job-openings-grid">
+          <!-- Populated dynamically -->
+        </div>
+      </section>
+
+      <!-- Tab Workspace: 1-on-1 Mentorship Booking -->
+      <section class="workspace-tab" id="tab-appointments">
+        <h1 class="page-title">1-on-1 Mentorship appointments</h1>
+        <p class="muted margin-bottom">Schedule coaching checks, clear gap reports, and submit portfolio entries for human reviews.</p>
+        
+        <div class="grid grid-3 gap">
+          <!-- Booking card -->
+          <div class="card glass shadow flex-column">
+            <h3 class="card-title">Schedule Session</h3>
+            <p class="muted margin-bottom">Select date, time, and target coach to schedule Google Meet touchpoint.</p>
+            <div class="flex-column gap">
+              <label class="form-label">
+                <span>Select Coach</span>
+                <select id="appointment-mentor" class="select-input">
+                  <option value="Dr. Vance">Dr. Vance (Technical Lead Coach)</option>
+                  <option value="Sarah Jennings">Sarah Jennings (Behavioral Coach)</option>
+                  <option value="Prof. Mehta">Prof. Mehta (Academic Liaison)</option>
+                </select>
+              </label>
+              <label class="form-label">
+                <span>Target Date</span>
+                <input type="date" id="appointment-date" class="text-input" />
+              </label>
+              <label class="form-label">
+                <span>Target Time Slot</span>
+                <input type="time" id="appointment-time" class="text-input" />
+              </label>
+              <button id="book-appointment-btn" class="primary-btn">Schedule Meeting Slot</button>
+            </div>
+          </div>
+
+          <!-- Appointments list -->
+          <div class="card glass shadow grid-span-2">
+            <h3 class="card-title">Booked Mentor Touchpoints</h3>
+            <p class="muted margin-bottom">Track scheduled Google Meet events and feedback notes.</p>
+            <div class="appointments-list-wrapper" id="booked-appointments-list">
+              <p class="muted">No sessions scheduled.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Cybersecurity Policy Panel -->
+      <section class="workspace-tab" id="tab-cyber-security">
+        <h1 class="page-title">Cybersecurity Policy Desk</h1>
+        <p class="muted margin-bottom">Track system compliance status, database encryption algorithms, and active rate limiting logs.</p>
+        
+        <div class="grid grid-3 gap margin-bottom">
+          <div class="card glass shadow text-center">
+            <span class="small-text uppercase text-green">Database Encryption</span>
+            <h2 class="margin-top-5 text-green">AES-256 Enabled</h2>
+            <p class="muted small-text">Sqlite3 tables encrypted with secure local block keys.</p>
+          </div>
+          <div class="card glass shadow text-center">
+            <span class="small-text uppercase text-blue">Transport Compliance</span>
+            <h2 class="margin-top-5 text-blue">TLS 1.3 Active</h2>
+            <p class="muted small-text">HSTS strict header policies injected globally.</p>
+          </div>
+          <div class="card glass shadow text-center">
+            <span class="small-text uppercase text-orange">Prompt Guardrails</span>
+            <h2 class="margin-top-5 text-orange">Content Moderation</h2>
+            <p class="muted small-text">Real-time prompt bypass sanitization checks on LLM gateway.</p>
+          </div>
+        </div>
+
+        <div class="grid grid-2 gap">
+          <!-- Cyber policy logs -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Security & Rate Limiting Audit Logs</h3>
+            <p class="muted margin-bottom">Cybersecurity ledger logging rate limiting warnings, unauthorized mime uploads, and prompt safety violations.</p>
+            <div class="security-table-wrapper" style="max-height: 300px; overflow-y: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>IP Address</th>
+                    <th>Category</th>
+                    <th>Action Blocked</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="security-logs-tbody">
+                  <tr><td colspan="4" class="text-center muted">No threats logged. System secure.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- RAG/CAG system monitor -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Knowledge Graph & RAG System Monitor</h3>
+            <p class="muted margin-bottom">RAG/CAG context pre-cache status and vector index search latency counters.</p>
+            <div class="flex-column gap" id="rag-cag-status-pane">
+              <!-- Dynamically populated -->
+            </div>
+            <div class="margin-top pt-3 border-top">
+              <h4>Closed-loop Feedback Engine Triggers</h4>
+              <div class="feedback-loops-list flex-column gap margin-top" id="safety-feedback-loops" style="max-height: 180px; overflow-y: auto;">
+                <p class="muted">No loop interventions logged.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Tab Workspace: Framework Map -->
+      <section class="workspace-tab" id="tab-framework-ref">
+        <div class="row between wrap margin-bottom">
+          <div>
+            <h1 class="page-title">Universal Readiness Flow Mapping</h1>
+            <p class="muted">Direct trace registry mapped from institutional blueprint specifications.</p>
+          </div>
+          <span class="pill-indicator pill-green" id="framework-pill">Framework Trace Active</span>
+        </div>
+        <div class="tabs" role="tablist">
+          <button class="tab-btn active" data-subtab="flow">9 Stages Flow</button>
+          <button class="tab-btn" data-subtab="dimensions">Readiness Dimensions</button>
+          <button class="tab-btn" data-subtab="gaps">Gaps Matrix</button>
+          <button class="tab-btn" data-subtab="compliance">Compliance Policies</button>
+          <button class="tab-btn" data-subtab="moats">Platform Moats</button>
+        </div>
+        
+        <div class="card glass shadow margin-top" id="framework-info-pane">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- Mentor Panel overlay console -->
+      <section class="workspace-tab" id="tab-mentor-desk">
+        <h1 class="page-title">Mentor Tracking Console</h1>
+        <p class="muted margin-bottom">Grade student uploads, audit certification claims, and track mentor coaching metrics.</p>
+        
+        <div class="grid grid-3 gap margin-bottom">
+          <div class="metric-card">
+            <span class="metric-label">Coaching Impact Factor (CIF)</span>
+            <strong class="metric-value text-green" id="mentor-cif-val">+18.4</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Engagement Velocity (EV)</span>
+            <strong class="metric-value text-blue" id="mentor-ev-val">4.2 sessions/wk</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Audit Resolution Time (ART)</span>
+            <strong class="metric-value text-orange" id="mentor-art-val">1.2 hours</strong>
+          </div>
+        </div>
+
+        <div class="grid grid-2 gap">
+          <!-- Student portfolio submission queue -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Portfolio Evidence Review Queue</h3>
+            <p class="muted margin-bottom">High-stakes student certification files requiring mentor manual review & approval.</p>
+            <div class="hitl-queue-list flex-column gap" id="mentor-hitl-queue">
+              <p class="muted">No pending review tasks in queue.</p>
+            </div>
+          </div>
+
+          <!-- Student diagnostic roster -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Assigned Cohort Diagnostic Roster</h3>
+            <p class="muted margin-bottom">Mock list of assigned student scorecards and identified readiness gaps.</p>
+            <div class="flex-column gap">
+              <div class="roster-item card glass py-2 px-3 row between">
+                <div><strong>Rahul Sen</strong><br/><span class="small-text muted">Engineering and Technology</span></div>
+                <div class="text-right"><strong>CARI: 72</strong><br/><span class="small-text text-red">Gap: Clean Code</span></div>
+              </div>
+              <div class="roster-item card glass py-2 px-3 row between">
+                <div><strong>Priya Sharma</strong><br/><span class="small-text muted">Management and Business</span></div>
+                <div class="text-right"><strong>CARI: 54</strong><br/><span class="small-text text-orange">Gap: Pitching</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Institution dashboard console -->
+      <section class="workspace-tab" id="tab-institution-board">
+        <h1 class="page-title">Institution Board Analytics</h1>
+        <p class="muted margin-bottom">Aggregate departmental scorecards, skilling convergence, and external partnership performance.</p>
+        
+        <div class="grid grid-3 gap margin-bottom">
+          <div class="metric-card">
+            <span class="metric-label">Employment Readiness Rate (ERR)</span>
+            <strong class="metric-value text-green">74.2%</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Cohort Skill Convergence (CSC)</span>
+            <strong class="metric-value text-blue">&sigma; = 8.4</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Skilling Partner ROI (SROI)</span>
+            <strong class="metric-value text-purple">88.5%</strong>
+          </div>
+        </div>
+
+        <div class="grid grid-2 gap">
+          
+          <!-- Partnership agreements lists -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Skilling Partnerships & Collaborations</h3>
+            <p class="muted margin-bottom">Active program mappings with public (NSDC) and private (Asperion) organizations.</p>
+            <div class="flex-column gap" id="institution-collaborations-list">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+
+          <!-- Cohort Gap Heatmap representation -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Cohort Competency Gap Heatmap</h3>
+            <p class="muted margin-bottom">Visual density indicating stream-level capability deficits.</p>
+            <div class="heatmap-panel flex-column gap">
+              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Purpose Clarity:</span><span class="pill-indicator pill-green">92% Pass</span></div>
+              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Communication Readiness:</span><span class="pill-indicator pill-orange">58% Deficit</span></div>
+              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Domain Technical Readiness:</span><span class="pill-indicator pill-red">65% Severe Deficit</span></div>
+              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Portfolio Project Evidence:</span><span class="pill-indicator pill-orange">42% Deficit</span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Employer matches portal -->
+      <section class="workspace-tab" id="tab-employer-board">
+        <h1 class="page-title">Employer Placement Matchmaker</h1>
+        <p class="muted margin-bottom">Discover, track, and match ready applicants against job requirements via target coefficients.</p>
+        
+        <div class="card glass shadow margin-bottom">
+          <h3>Active Job Listings & Matches</h3>
+          <div class="flex-column gap margin-top" id="employer-job-matches">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ONBOARDING FORM MODAL -->
+  <div class="modal-overlay hidden" id="onboard-modal">
+    <div class="modal-card glass shadow flex-column gap">
+      <div class="row between border-bottom pb-2">
+        <h3>System Onboarding & Diagnostics</h3>
+        <button id="close-onboard-btn" class="close-btn">&times;</button>
+      </div>
+
+      <div class="modal-body flex-column gap">
+        <div class="grid grid-2 gap">
+          <label class="form-label">
+            <span>Name</span>
+            <input type="text" id="onboard-name" class="text-input" placeholder="Your name" />
+          </label>
+          <label class="form-label">
+            <span>Stream Selection</span>
+            <select id="onboard-stream" class="select-input">
+              <option value="Engineering and Technology">Engineering and Technology</option>
+              <option value="Management and Business">Management and Business</option>
+              <option value="Healthcare and Life Sciences">Healthcare and Life Sciences</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid grid-2 gap">
+          <label class="form-label">
+            <span>Experience Level</span>
+            <select id="onboard-experience" class="select-input">
+              <option value="Fresher">Fresher (Campus)</option>
+              <option value="Intern">Intern</option>
+              <option value="0-1 years">0-1 years</option>
+              <option value="1-3 years">1-3 years</option>
+            </select>
+          </label>
+          <label class="form-label">
+            <span>Country Context</span>
+            <input type="text" id="onboard-country" class="text-input" placeholder="e.g. India" />
+          </label>
+        </div>
+
+        <h4>CARI Socioeconomic Context Factors</h4>
+        <div class="grid grid-3 gap">
+          <label class="form-label">
+            <span>Family Expectation Pressure</span>
+            <select id="onboard-cf-family" class="select-input">
+              <option value="Low">Low</option>
+              <option value="Medium" selected>Medium</option>
+              <option value="High">High</option>
+            </select>
+          </label>
+          <label class="form-label">
+            <span>Financial Dependents</span>
+            <select id="onboard-cf-finance" class="select-input">
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </label>
+          <label class="form-label">
+            <span>Stress Baseline (0-100)</span>
+            <input type="number" id="onboard-cf-stress" class="text-input" value="40" min="0" max="100" />
+          </label>
+        </div>
+
+        <div class="grid grid-3 gap">
+          <label class="form-label">
+            <span>Confidence Baseline (0-100)</span>
+            <input type="number" id="onboard-cf-confidence" class="text-input" value="60" min="0" max="100" />
+          </label>
+          <label class="form-label">
+            <span>Resilience Rating (0-100)</span>
+            <input type="number" id="onboard-cf-resilience" class="text-input" value="70" min="0" max="100" />
+          </label>
+          <label class="form-label">
+            <span>Household Income Tier</span>
+            <select id="onboard-cf-income" class="select-input">
+              <option value="Low">Low Income</option>
+              <option value="Middle Class" selected>Middle Class</option>
+              <option value="High">High Income</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="grid grid-2 gap">
+          <label class="form-label">
+            <span>Origin City Tier</span>
+            <select id="onboard-cf-city" class="select-input">
+              <option value="Tier 1">Tier 1 (Metro)</option>
+              <option value="Tier 2" selected>Tier 2</option>
+              <option value="Tier 3">Tier 3</option>
+              <option value="Rural">Rural</option>
+            </select>
+          </label>
+          <label class="form-label">
+            <span>College Tier</span>
+            <select id="onboard-cf-college" class="select-input">
+              <option value="Tier 1">Tier 1 (Premium)</option>
+              <option value="Tier 2" selected>Tier 2</option>
+              <option value="Tier 3">Tier 3 (Local)</option>
+            </select>
+          </label>
+        </div>
+
+        <h4>Dream & Aspiration mapping</h4>
+        <div class="grid grid-2 gap">
+          <label class="form-label">
+            <span>Target Dream Career Role</span>
+            <input type="text" id="onboard-dream-role" class="text-input" placeholder="e.g. AI Product Manager" />
+          </label>
+          <label class="form-label">
+            <span>Why does this Dream matter to you?</span>
+            <input type="text" id="onboard-dream-reason" class="text-input" placeholder="Explain your core purpose..." />
+          </label>
+        </div>
+
+        <div class="grid grid-2 gap">
+          <label class="form-label">
+            <span>What impact do you want to create?</span>
+            <input type="text" id="onboard-dream-impact" class="text-input" placeholder="Explain who will benefit..." />
+          </label>
+          <label class="form-label">
+            <span>What professional identity goal must you adopt?</span>
+            <input type="text" id="onboard-dream-identity" class="text-input" placeholder="e.g. A detail-oriented, supportive systems engineer..." />
+          </label>
+        </div>
+
+        <div class="grid grid-2 gap">
+          <label class="form-label">
+            <span>Current Strengths</span>
+            <input type="text" id="onboard-dream-strengths" class="text-input" placeholder="Skills or values you have..." />
+          </label>
+          <label class="form-label">
+            <span>Fear & Core blockages</span>
+            <input type="text" id="onboard-dream-fears" class="text-input" placeholder="What holds you back..." />
+          </label>
+        </div>
+
+        <label class="form-label">
+          <span>Self-Reflection Statement</span>
+          <textarea id="onboard-reflection" class="textarea-input" rows="2" placeholder="Write a summary reflection..."></textarea>
+        </label>
+      </div>
+
+      <div class="row end gap border-top pt-2">
+        <button id="cancel-onboard-btn" class="secondary-btn">Cancel</button>
+        <button id="submit-onboard-btn" class="primary-btn">Submit Diagnostics</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

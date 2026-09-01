@@ -1,0 +1,66 @@
+{
+  "passed": 11,
+  "failed": 1,
+  "tests": [
+    {
+      "name": "Health Endpoint",
+      "passed": true,
+      "details": "{\"status\":\"ok\"}"
+    },
+    {
+      "name": "Auth Current User GET",
+      "passed": true,
+      "details": "{\"user_id\":1,\"username\":\"fresha_aspirant\",\"role\":\"Learner\"}"
+    },
+    {
+      "name": "Auth Role Switch POST",
+      "passed": true,
+      "details": "{\"username\":\"fresha_aspirant\",\"role\":\"Mentor\"}"
+    },
+    {
+      "name": "Profile GET",
+      "passed": false,
+      "details": "{\"detail\":\"Too many API requests. Please slow down.\"}"
+    },
+    {
+      "name": "Profile POST (Dream)",
+      "passed": true,
+      "details": "{\"message\":\"Profile updated successfully\"}"
+    },
+    {
+      "name": "Context POST",
+      "passed": true,
+      "details": "{\"message\":\"Context factors logged\"}"
+    },
+    {
+      "name": "Context GET",
+      "passed": true,
+      "details": "{\"financial_dependency\":\"Yes\",\"id\":1,\"stress_baseline\":40,\"income_tier\":\"Middle\",\"college_tier\":\"Tier 2\",\"confidence_baseline\":70,\"learner_id\":1,\"family_pressure\":\"Medium\",\"resilience_rating\":80,\"city_tier\":\"Tier 1\"}"
+    },
+    {
+      "name": "Skills GET",
+      "passed": true,
+      "details": true
+    },
+    {
+      "name": "Skills POST",
+      "passed": true,
+      "details": "{\"id\":18,\"name\":\"Testing\",\"category\":\"Technical\",\"proficiency\":\"Intermediate\",\"verification_status\":\"Self-Reported\"}"
+    },
+    {
+      "name": "LMS Courses GET",
+      "passed": true,
+      "details": "Found 1 courses"
+    },
+    {
+      "name": "LMS Enroll POST",
+      "passed": true,
+      "details": "{\"message\":\"Enrolled\"}"
+    },
+    {
+      "name": "LMS Progress POST",
+      "passed": true,
+      "details": "{\"progress_percent\":50}"
+    }
+  ]
+}
