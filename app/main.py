@@ -733,19 +733,71 @@ def process_dummy_payment(
 @app.get("/api/jobs", response_model=List[JobSearchResponse])
 def get_jobs(db: Session = Depends(get_db)):
     jobs = db.query(ExistingJob).all()
-    results = []
-    for j in jobs:
-        results.append(JobSearchResponse(
-            id=j.id,
-            title=j.title,
-            organization=j.organization,
-            type=j.type,
-            required_skills=j.required_skills.split(", "),
-            url=j.url,
-            match_score=j.match_score
-        ))
-    return results
 
+    # Get the current student's skills
+    student_skills = (
+        db.query(StudentSkill)
+        .filter(StudentSkill.learner_id == CURRENT_USER_ID)
+        .all()
+    )
+
+    # Normalize student skill names
+    student_skill_names = {
+        skill.name.strip().lower()
+        for skill in student_skills
+        if skill.name
+    }
+
+    results = []
+
+    for j in jobs:
+
+        # Get required skills for this job
+        required_skills = [
+            skill.strip()
+            for skill in j.required_skills.split(",")
+            if skill.strip()
+        ]
+
+        # Find matched and missing skills
+        matched_skill_names = []
+        missing_skill_names = []
+
+        for skill in required_skills:
+            if skill.lower() in student_skill_names:
+                matched_skill_names.append(skill)
+            else:
+                missing_skill_names.append(skill)
+
+        # Calculate Fit Index
+        if required_skills:
+            match_score = round(
+                (len(matched_skill_names) / len(required_skills)) * 100
+            )
+        else:
+            match_score = 0
+
+        results.append(
+            JobSearchResponse(
+                id=j.id,
+                title=j.title,
+                organization=j.organization,
+                type=j.type,
+                required_skills=required_skills,
+                matched_skills=matched_skill_names,
+                missing_skills=missing_skill_names,
+                url=j.url,
+                match_score=match_score
+            )
+        )
+
+    # Highest matching jobs first
+    results.sort(
+        key=lambda job: job.match_score,
+        reverse=True
+    )
+
+    return results
 
 # --- ASPERION INTERNAL LMS ENDPOINTS ---
 @app.get("/api/lms/courses", response_model=List[LmsCourseResponse])

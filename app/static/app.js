@@ -1188,25 +1188,125 @@ async function loadJobsPayload() {
     const jobs = await res.json();
 
     const grid = document.getElementById("job-openings-grid");
+
     if (jobs && jobs.length > 0) {
       grid.innerHTML = jobs.map(j => `
         <div class="card glass shadow row between align-center py-3">
-          <div>
+
+          <div style="flex:1;">
+
             <h4>${j.title}</h4>
-            <span class="small-text muted">Organization: ${j.organization} | Track: ${j.type}</span>
+
+            <span class="small-text muted">
+              Organization: ${j.organization} | Track: ${j.type}
+            </span>
+
+            <!-- Required Skills -->
             <div class="skills-chips-wrapper pt-1">
-              ${j.required_skills.map(s => `<span class="skill-chip tech small-text py-0 px-2" style="font-size:11px;">${s}</span>`).join("")}
+              ${j.required_skills.map(s => `
+                <span
+                  class="skill-chip tech small-text py-0 px-2"
+                  style="font-size:11px;"
+                >
+                  ${s}
+                </span>
+              `).join("")}
             </div>
+
+            <!-- Matched Skills -->
+            ${
+              j.matched_skills && j.matched_skills.length > 0
+              ? `
+                <div class="margin-top">
+                  <span class="small-text text-green">
+                    ✓ Matched Skills
+                  </span>
+
+                  <div class="skills-chips-wrapper pt-1">
+                    ${j.matched_skills.map(s => `
+                      <span
+                        class="skill-chip tech small-text py-0 px-2"
+                        style="font-size:11px;"
+                      >
+                        ✓ ${s}
+                      </span>
+                    `).join("")}
+                  </div>
+                </div>
+              `
+              : `
+                <div class="margin-top">
+                  <span class="small-text muted">
+                    No matching skills yet
+                  </span>
+                </div>
+              `
+            }
+
+            <!-- Missing Skills -->
+            ${
+              j.missing_skills && j.missing_skills.length > 0
+              ? `
+                <div class="margin-top">
+                  <span class="small-text">
+                    Skills to Improve
+                  </span>
+
+                  <div class="skills-chips-wrapper pt-1">
+                    ${j.missing_skills.map(s => `
+                      <span
+                        class="skill-chip small-text py-0 px-2"
+                        style="font-size:11px;"
+                      >
+                        ○ ${s}
+                      </span>
+                    `).join("")}
+                  </div>
+                </div>
+              `
+              : `
+                <div class="margin-top">
+                  <span class="small-text text-green">
+                    ✓ All required skills matched
+                  </span>
+                </div>
+              `
+            }
+
           </div>
+
           <div class="text-right flex-column gap-5">
-            <span class="pill-indicator ${j.match_score >= 80 ? 'pill-green' : 'pill-orange'}" style="display:inline-block;">Fit Index: ${j.match_score}%</span>
-            <a href="${j.url}" target="_blank" class="secondary-btn small-text" style="text-decoration:none; margin-top:6px;">Apply Direct</a>
+
+            <!-- Fit Index -->
+            <span
+              class="pill-indicator ${
+                j.match_score >= 80
+                  ? "pill-green"
+                  : "pill-orange"
+              }"
+              style="display:inline-block;"
+            >
+              Fit Index: ${j.match_score}%
+            </span>
+
+            <!-- Apply -->
+            <a
+              href="${j.url}"
+              target="_blank"
+              class="secondary-btn small-text"
+              style="text-decoration:none; margin-top:6px;"
+            >
+              Apply Direct
+            </a>
+
           </div>
+
         </div>
       `).join("");
     }
+
   } catch (err) {
-    console.error(err);
+    console.error("Failed to load jobs:", err);
   }
 }
 

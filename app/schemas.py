@@ -271,13 +271,14 @@ class LmsCollaborationPostResponse(BaseModel):
     text: str
     created_at: Any
 
-
 class JobSearchResponse(BaseModel):
     id: int
     title: str
     organization: str
     type: str
     required_skills: List[str]
+    matched_skills: List[str] = []
+    missing_skills: List[str] = []
     url: str
     match_score: int
 
