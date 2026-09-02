@@ -381,6 +381,30 @@ async function loadSkillsHubPayload() {
   }
 }
 
+async function removeLearnerSkill(skillId) {
+  try {
+    const response = await fetch(
+      `/api/learner/skills/${skillId}`,
+      {
+        method: "DELETE"
+      }
+    );
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.detail || "Failed to remove skill.");
+      return;
+    }
+
+    await loadSkillsHubPayload();
+
+  } catch (err) {
+    console.error("Failed to remove skill:", err);
+    alert("Failed to remove skill.");
+  }
+}
+
 function getStreamSuggestedLocalSkills(stream) {
   const streamLower = (stream || "").toLowerCase();
   if (streamLower.includes("business") || streamLower.includes("management")) {
@@ -1318,18 +1342,22 @@ async function loadAppointmentsPayload() {
 
     const container = document.getElementById("booked-appointments-list");
     if (appts && appts.length > 0) {
-      container.innerHTML = appts.map(a => `
+      container.innerHTML = appts.map(a => {
+        const mType = a.meeting_type || "Google Meet";
+        return `
         <div class="card glass shadow py-2 px-3 margin-bottom row between align-center">
           <div>
             <h4>Session with ${a.mentor_name}</h4>
-            <span class="small-text muted">Scheduled: ${a.date_str} at ${a.time_str}</span>
+            <span class="small-text muted">Scheduled: ${a.date_str} at ${a.time_str}</span><br/>
+            <span class="small-text muted">Meeting:<br/>${mType}</span>
           </div>
           <div class="text-right">
-            <span class="pill-indicator pill-green" style="display:inline-block; margin-bottom:6px;">${a.status}</span><br/>
-            <a href="${a.meet_url}" target="_blank" class="primary-btn small-text" style="text-decoration:none;">Join Google Meet</a>
+              <span class="pill-indicator pill-green" style="display:inline-block; margin-bottom:6px;">${a.status}</span><br/>
+              <button onclick="openEditMeetingModal('${a.id}', '${a.mentor_name}', '${a.date_str}', '${a.time_str}', '${a.meeting_type}', '${a.meet_url}')" class="primary-btn small-text" style="background: #26384f; color: #fff; margin-right: 5px;">Edit Meeting</button>
+              <a href="${a.meet_url}" target="_blank" class="primary-btn small-text" style="text-decoration:none;">Join Meeting</a>
           </div>
         </div>
-      `).join("");
+      `}).join("");
     } else {
       container.innerHTML = `<p class="muted">No touchpoints booked yet. Select a slot on the left to schedule.</p>`;
     }
@@ -1338,24 +1366,109 @@ async function loadAppointmentsPayload() {
   }
 }
 
-async function bookMentorshipMeeting() {
-  const mentor = document.getElementById("appointment-mentor").value;
-  const date = document.getElementById("appointment-date").value;
-  const time = document.getElementById("appointment-time").value;
-  if (!date || !time) return;
-
-  try {
-    await fetch("/api/mentorship/appointments", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mentor_name: mentor, date_str: date, time_str: time })
-    });
-    alert("Touchpoint scheduled. Meeting details saved.");
-    loadAppointmentsPayload();
-  } catch (err) {
-    console.error(err);
+  function toggleCustomUrlInput() {
+    const meetingType = document.getElementById("appointment-meeting-type").value;
+    const customUrlContainer = document.getElementById("custom-url-container");
+    if (meetingType === "Custom Meeting Link") {
+      customUrlContainer.style.display = "block";
+    } else {
+      customUrlContainer.style.display = "none";
+    }
   }
-}
+
+  async function bookMentorshipMeeting() {
+    const mentor = document.getElementById("appointment-mentor").value;
+    const date = document.getElementById("appointment-date").value;
+    const time = document.getElementById("appointment-time").value;
+    const meetingType = document.getElementById("appointment-meeting-type").value;
+    const customUrl = document.getElementById("appointment-custom-url").value;
+
+    if (!mentor || !date || !time || !meetingType) return;
+    if (meetingType === "Custom Meeting Link" && !customUrl) {
+      alert("Please enter a custom meeting URL.");
+      return;
+    }
+
+    try {
+      await fetch("/api/mentorship/appointments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mentor_name: mentor, date_str: date, time_str: time, meeting_type: meetingType, custom_url: customUrl })
+      });
+      alert("Touchpoint scheduled. Meeting details saved.");
+      loadAppointmentsPayload();
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  function toggleEditCustomUrlInput() {
+    const meetingType = document.getElementById("edit-appointment-meeting-type").value;
+    const customUrlContainer = document.getElementById("edit-custom-url-container");
+    if (meetingType === "Custom Meeting Link") {
+      customUrlContainer.style.display = "block";
+    } else {
+      customUrlContainer.style.display = "none";
+    }
+  }
+
+  function openEditMeetingModal(appId, mentor, date, time, meetingType, meetUrl) {
+    document.getElementById("edit-appointment-id").value = appId;
+    document.getElementById("edit-appointment-mentor").value = mentor;
+    document.getElementById("edit-appointment-date").value = date;
+    document.getElementById("edit-appointment-time").value = time;
+    
+    // Safely fallback meeting type
+    const safeMeetingType = meetingType && meetingType !== "null" ? meetingType : "Google Meet";
+    document.getElementById("edit-appointment-meeting-type").value = safeMeetingType;
+    
+    toggleEditCustomUrlInput();
+    if (safeMeetingType === "Custom Meeting Link") {
+      document.getElementById("edit-appointment-custom-url").value = meetUrl;
+    } else {
+      document.getElementById("edit-appointment-custom-url").value = "";
+    }
+    
+    document.getElementById("edit-mentorship-modal").style.display = "flex";
+  }
+
+  function closeEditMentorshipModal() {
+    document.getElementById("edit-mentorship-modal").style.display = "none";
+  }
+
+  async function saveEditedMentorshipMeeting() {
+    const appId = document.getElementById("edit-appointment-id").value;
+    const mentor = document.getElementById("edit-appointment-mentor").value;
+    const date = document.getElementById("edit-appointment-date").value;
+    const time = document.getElementById("edit-appointment-time").value;
+    const meetingType = document.getElementById("edit-appointment-meeting-type").value;
+    const customUrl = document.getElementById("edit-appointment-custom-url").value;
+
+    if (!mentor || !date || !time || !meetingType) return;
+    if (meetingType === "Custom Meeting Link" && !customUrl) {
+      alert("Please enter a custom meeting URL.");
+      return;
+    }
+
+    try {
+      await fetch(`/api/mentorship/appointments/${appId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+            mentor_name: mentor, 
+            date_str: date, 
+            time_str: time, 
+            meeting_type: meetingType, 
+            custom_url: customUrl 
+        })
+      });
+      alert("Meeting details updated successfully.");
+      closeEditMentorshipModal();
+      loadAppointmentsPayload();
+    } catch (err) {
+      console.error(err);
+    }
+  }
 
 // --- TAB PAYLOAD 9: CYBER SECURITY ---
 async function loadCyberSecurityPayload() {

@@ -372,6 +372,8 @@ class MentorSession(Base):
     mentor_name: Mapped[str] = mapped_column(String(120))
     date_str: Mapped[str] = mapped_column(String(60))
     time_str: Mapped[str] = mapped_column(String(60))
+    meeting_type: Mapped[str | None] = mapped_column(String(60), nullable=True, default="Google Meet")
+    meeting_id: Mapped[str | None] = mapped_column(String(120), nullable=True)
     meet_url: Mapped[str] = mapped_column(String(500))
     notes: Mapped[str] = mapped_column(Text, default="")
     feedback: Mapped[str] = mapped_column(Text, default="")

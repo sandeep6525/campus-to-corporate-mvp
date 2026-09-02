@@ -287,6 +287,16 @@ class MentorshipBookRequest(BaseModel):
     mentor_name: str
     date_str: str
     time_str: str
+    meeting_type: str | None = "Google Meet"
+    custom_url: str | None = None
+
+
+class MentorshipUpdateRequest(BaseModel):
+    mentor_name: str
+    date_str: str
+    time_str: str
+    meeting_type: str | None = "Google Meet"
+    custom_url: str | None = None
 
 
 class MentorshipSessionResponse(BaseModel):
@@ -295,6 +305,8 @@ class MentorshipSessionResponse(BaseModel):
     date_str: str
     time_str: str
     meet_url: str
+    meeting_type: str | None = None
+    meeting_id: str | None = None
     notes: str
     feedback: str
     status: str

@@ -80,6 +80,7 @@ from .schemas import (
     LmsCollaborationPostResponse,
     JobSearchResponse,
     MentorshipBookRequest,
+    MentorshipUpdateRequest,
     MentorshipSessionResponse,
     SecurityPolicyLogResponse,
     FeedbackLoopResponse,
@@ -176,7 +177,7 @@ async def security_policy_middleware(request: Request, call_next):
 
         # Block only extremely rapid repeated requests
         # to the SAME endpoint.
-        if curr_time - last_time < 0.01:
+        if curr_time - last_time < 1.0:
             db = next(get_db())
 
             log = SecurityPolicyLog(
@@ -503,18 +504,64 @@ def get_learner_skills(db: Session = Depends(get_db)):
 
 
 @app.post("/api/learner/skills", response_model=StudentSkillResponse)
-def add_learner_skill(payload: StudentSkillRequest, db: Session = Depends(get_db)):
+def add_learner_skill(
+    payload: StudentSkillRequest,
+    db: Session = Depends(get_db)
+):
+    # Prevent duplicate skills for the same learner
+    existing_skill = (
+        db.query(StudentSkill)
+        .filter(
+            StudentSkill.learner_id == CURRENT_USER_ID,
+            StudentSkill.name.ilike(payload.name.strip())
+        )
+        .first()
+    )
+
+    if existing_skill:
+        return existing_skill
+
     skill = StudentSkill(
         learner_id=CURRENT_USER_ID,
-        name=payload.name,
+        name=payload.name.strip(),
         category=payload.category,
         proficiency=payload.proficiency,
         verification_status="Self-Reported"
     )
+
     db.add(skill)
     db.commit()
     db.refresh(skill)
+
     return skill
+
+
+@app.delete("/api/learner/skills/{skill_id}")
+def delete_learner_skill(
+    skill_id: int,
+    db: Session = Depends(get_db)
+):
+    skill = (
+        db.query(StudentSkill)
+        .filter(
+            StudentSkill.id == skill_id,
+            StudentSkill.learner_id == CURRENT_USER_ID
+        )
+        .first()
+    )
+
+    if not skill:
+        raise HTTPException(
+            status_code=404,
+            detail="Skill not found."
+        )
+
+    db.delete(skill)
+    db.commit()
+
+    return {
+        "message": "Skill removed successfully."
+    }
 
 
 @app.get("/api/learner/certifications", response_model=List[StudentCertificationResponse])
@@ -621,12 +668,32 @@ def get_mentorship_appointments(db: Session = Depends(get_db)):
 
 @app.post("/api/mentorship/appointments", response_model=MentorshipSessionResponse)
 def book_mentorship_appointment(payload: MentorshipBookRequest, db: Session = Depends(get_db)):
-    meet_url = f"https://meet.google.com/mock-{uuid4().hex[:4]}-{uuid4().hex[:4]}"
+    meeting_type = payload.meeting_type or "Google Meet"
+    
+    if meeting_type == "Google Meet":
+        meeting_id = f"DEMO-GM-{uuid4().hex[:5].upper()}"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+    elif meeting_type == "Microsoft Teams":
+        meeting_id = f"DEMO-TEAMS-{uuid4().hex[:5].upper()}"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+    elif meeting_type == "Zoom":
+        meeting_id = f"DEMO-ZOOM-{uuid4().hex[:5].upper()}"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+    elif meeting_type == "Custom Meeting Link":
+        meeting_id = f"DEMO-CUSTOM-{uuid4().hex[:5].upper()}"
+        meet_url = payload.custom_url if payload.custom_url else f"/demo/mentorship/{meeting_id}"
+    else:
+        meeting_id = f"DEMO-GM-{uuid4().hex[:5].upper()}"
+        meeting_type = "Google Meet"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+
     session = MentorSession(
         learner_id=CURRENT_USER_ID,
         mentor_name=payload.mentor_name,
         date_str=payload.date_str,
         time_str=payload.time_str,
+        meeting_type=meeting_type,
+        meeting_id=meeting_id,
         meet_url=meet_url,
         notes="Scheduled via AspireOS dashboard.",
         status="Scheduled"
@@ -636,6 +703,172 @@ def book_mentorship_appointment(payload: MentorshipBookRequest, db: Session = De
     db.refresh(session)
     return session
 
+
+@app.put("/api/mentorship/appointments/{appointment_id}", response_model=MentorshipSessionResponse)
+def update_mentorship_appointment(appointment_id: int, payload: MentorshipUpdateRequest, db: Session = Depends(get_db)):
+    session = db.query(MentorSession).filter(MentorSession.id == appointment_id, MentorSession.learner_id == CURRENT_USER_ID).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Appointment not found")
+
+    meeting_type = payload.meeting_type or "Google Meet"
+    
+    if meeting_type == "Google Meet":
+        meeting_id = f"DEMO-GM-{uuid4().hex[:5].upper()}"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+    elif meeting_type == "Microsoft Teams":
+        meeting_id = f"DEMO-TEAMS-{uuid4().hex[:5].upper()}"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+    elif meeting_type == "Zoom":
+        meeting_id = f"DEMO-ZOOM-{uuid4().hex[:5].upper()}"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+    elif meeting_type == "Custom Meeting Link":
+        meeting_id = f"DEMO-CUSTOM-{uuid4().hex[:5].upper()}"
+        meet_url = payload.custom_url if payload.custom_url else f"/demo/mentorship/{meeting_id}"
+    else:
+        meeting_id = f"DEMO-GM-{uuid4().hex[:5].upper()}"
+        meeting_type = "Google Meet"
+        meet_url = f"/demo/mentorship/{meeting_id}"
+
+    session.mentor_name = payload.mentor_name
+    session.date_str = payload.date_str
+    session.time_str = payload.time_str
+    session.meeting_type = meeting_type
+    session.meeting_id = meeting_id
+    session.meet_url = meet_url
+
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@app.get("/demo/mentorship/{meeting_id}", response_class=HTMLResponse)
+def demo_mentorship_meeting(meeting_id: str, db: Session = Depends(get_db)):
+    # Lookup by meeting_id first, then fallback to meet_url matching
+    session = db.query(MentorSession).filter(MentorSession.meeting_id == meeting_id).first()
+    if not session:
+        session = db.query(MentorSession).filter(MentorSession.meet_url.contains(meeting_id)).first()
+
+    mentor_name = session.mentor_name if session else "Unknown Mentor"
+    date_str = session.date_str if session else "Unknown Date"
+    time_str = session.time_str if session else "Unknown Time"
+    meeting_type = (session.meeting_type if session and session.meeting_type else "Google Meet")
+
+    return f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Demo Mentor Meeting</title>
+        <style>
+            body {{
+                margin: 0;
+                font-family: Arial, sans-serif;
+                background: #07111f;
+                color: white;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+            }}
+
+            .meeting-card {{
+                width: 500px;
+                background: #101c2c;
+                border: 1px solid #26384f;
+                border-radius: 16px;
+                padding: 35px;
+                text-align: center;
+                box-shadow: 0 20px 50px rgba(0,0,0,.4);
+            }}
+
+            h1 {{
+                margin-bottom: 10px;
+            }}
+
+            .badge {{
+                display: inline-block;
+                padding: 6px 14px;
+                border-radius: 20px;
+                background: #063f35;
+                color: #00e6a8;
+                margin: 15px 0;
+            }}
+
+            .info {{
+                text-align: left;
+                background: #0b1726;
+                padding: 20px;
+                border-radius: 10px;
+                margin: 20px 0;
+            }}
+
+            .info p {{
+                margin: 10px 0;
+            }}
+
+            .button {{
+                display: inline-block;
+                padding: 12px 25px;
+                background: #20c9f3;
+                color: #001018;
+                border-radius: 8px;
+                text-decoration: none;
+                font-weight: bold;
+                border: none;
+                cursor: pointer;
+            }}
+            
+            .button-secondary {{
+                background: #26384f;
+                color: #ffffff;
+                margin-left: 10px;
+            }}
+
+            .note {{
+                color: #9aa8ba;
+                font-size: 13px;
+                margin-top: 20px;
+            }}
+        </style>
+    </head>
+
+    <body>
+
+        <div class="meeting-card">
+
+            <h1>Mentor Meeting</h1>
+
+            <div class="badge">
+                DEMO MEETING
+            </div>
+
+            <div class="info">
+                <p><strong>Mentor:</strong> {mentor_name}</p>
+                <p><strong>Meeting Type:</strong> {meeting_type}</p>
+                <p><strong>Date:</strong> {date_str}</p>
+                <p><strong>Time:</strong> {time_str}</p>
+                <p><strong>Status:</strong> Scheduled</p>
+                <p><strong>Meeting ID:</strong> {meeting_id}</p>
+            </div>
+
+            <p class="note">
+                This is a demo meeting for the AspireOS MVP.<br>
+                Real meeting-platform integration will be connected later.
+            </p>
+
+            <div style="margin-top: 25px;">
+                <button onclick="alert('Demo Meeting Joined!')" class="button">
+                    Join Demo Meeting
+                </button>
+                <a href="/" class="button button-secondary">
+                    Leave Meeting
+                </a>
+            </div>
+
+        </div>
+
+    </body>
+    </html>
+    """
 
 # --- CAMPUS COURSES & COUPONS ENDPOINTS ---
 @app.get("/api/courses/campus")

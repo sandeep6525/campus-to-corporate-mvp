@@ -28,6 +28,31 @@ def has_gemini() -> bool:
 
 
 # ============================================================
+# PROMPT GUARDRAILS
+# ============================================================
+
+def _contains_unsafe_content(text: str) -> bool:
+    if not text:
+        return False
+    
+    text_lower = text.lower()
+    unsafe_patterns = [
+        "ignore previous instructions",
+        "ignore all previous instructions",
+        "jailbreak",
+        "bypass",
+        "hack",
+        "system prompt",
+        "you are a completely different bot",
+        "print passwords"
+    ]
+    for pattern in unsafe_patterns:
+        if pattern in text_lower:
+            return True
+    return False
+
+
+# ============================================================
 # MOCK INTERVIEW - QUESTION GENERATION
 # ============================================================
 
@@ -37,6 +62,9 @@ def generate_questions(
     difficulty: str = "medium",
     track: str = "HR & Behavioral"
 ) -> list[str]:
+
+    if _contains_unsafe_content(role) or _contains_unsafe_content(experience) or _contains_unsafe_content(difficulty) or _contains_unsafe_content(track):
+        raise ValueError("Prompt blocked by security guardrails.")
 
     # ------------------------------------------------------------
     # Gemini not configured → local fallback
@@ -210,7 +238,11 @@ def save_media_file(
             if media_type == "video"
             else ".wav"
         )
-    )
+    ).lower()
+
+    allowed_extensions = {".webm", ".wav", ".mp3", ".mp4", ".pdf", ".png", ".jpg", ".jpeg"}
+    if extension not in allowed_extensions:
+        raise ValueError(f"File extension {extension} is not allowed by security policies.")
 
     safe_name = (
         f"q{question_id}-{uuid4().hex}{extension}"
@@ -274,6 +306,9 @@ def evaluate_answer(
     is_stress: bool = False,
     rag_context: str | None = None
 ) -> EvaluationResult:
+
+    if _contains_unsafe_content(question) or _contains_unsafe_content(answer_text) or (submitted_code and _contains_unsafe_content(submitted_code)):
+        raise ValueError("Prompt blocked by security guardrails.")
 
     # ------------------------------------------------------------
     # Gemini not configured → local evaluation

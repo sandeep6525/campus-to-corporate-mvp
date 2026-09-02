@@ -633,6 +633,19 @@
                 <span>Target Time Slot</span>
                 <input type="time" id="appointment-time" class="text-input" />
               </label>
+              <label class="form-label">
+                <span>Meeting Type</span>
+                <select id="appointment-meeting-type" class="select-input" onchange="toggleCustomUrlInput()">
+                  <option value="Google Meet">Google Meet</option>
+                  <option value="Microsoft Teams">Microsoft Teams</option>
+                  <option value="Zoom">Zoom</option>
+                  <option value="Custom Meeting Link">Custom Meeting Link</option>
+                </select>
+              </label>
+              <label class="form-label" id="custom-url-container" style="display: none;">
+                <span>Custom Meeting URL</span>
+                <input type="url" id="appointment-custom-url" class="text-input" placeholder="https://example.com/meet" />
+              </label>
               <button id="book-appointment-btn" class="primary-btn">Schedule Meeting Slot</button>
             </div>
           </div>
@@ -986,6 +999,49 @@
       <div class="row end gap border-top pt-2">
         <button id="cancel-onboard-btn" class="secondary-btn">Cancel</button>
         <button id="submit-onboard-btn" class="primary-btn">Submit Diagnostics</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Mentorship Appointment Modal -->
+  <div id="edit-mentorship-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 1000; justify-content: center; align-items: center;">
+    <div class="card glass shadow" style="width: 400px; padding: 30px; background: #101c2c;">
+      <h3>Edit Mentorship Appointment</h3>
+      <input type="hidden" id="edit-appointment-id" />
+      <div class="flex-column gap" style="margin-top: 20px;">
+        <label class="form-label">
+          <span>Select Coach</span>
+          <select id="edit-appointment-mentor" class="select-input">
+            <option value="Dr. Vance">Dr. Vance (Technical Lead Coach)</option>
+            <option value="Sarah Jennings">Sarah Jennings (Behavioral Coach)</option>
+            <option value="Prof. Mehta">Prof. Mehta (Academic Liaison)</option>
+          </select>
+        </label>
+        <label class="form-label">
+          <span>Target Date</span>
+          <input type="date" id="edit-appointment-date" class="text-input" />
+        </label>
+        <label class="form-label">
+          <span>Target Time Slot</span>
+          <input type="time" id="edit-appointment-time" class="text-input" />
+        </label>
+        <label class="form-label">
+          <span>Meeting Type</span>
+          <select id="edit-appointment-meeting-type" class="select-input" onchange="toggleEditCustomUrlInput()">
+            <option value="Google Meet">Google Meet</option>
+            <option value="Microsoft Teams">Microsoft Teams</option>
+            <option value="Zoom">Zoom</option>
+            <option value="Custom Meeting Link">Custom Meeting Link</option>
+          </select>
+        </label>
+        <label class="form-label" id="edit-custom-url-container" style="display: none;">
+          <span>Custom Meeting URL</span>
+          <input type="url" id="edit-appointment-custom-url" class="text-input" placeholder="https://example.com/meet" />
+        </label>
+        <div style="margin-top: 10px; display: flex; gap: 10px;">
+          <button onclick="saveEditedMentorshipMeeting()" class="primary-btn" style="flex: 1;">Save Changes</button>
+          <button onclick="closeEditMentorshipModal()" class="primary-btn" style="flex: 1; background: #26384f; color: #fff;">Cancel</button>
+        </div>
       </div>
     </div>
   </div>
