@@ -657,6 +657,78 @@ def get_campus_courses(db: Session = Depends(get_db)):
     return results
 
 
+@app.post("/api/courses/{course_id}/enroll")
+def enroll_campus_course(
+    course_id: int,
+    db: Session = Depends(get_db)
+):
+    course = db.query(CampusCourse).filter(CampusCourse.id == course_id).first()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # Check whether learner is already enrolled
+    existing = (
+        db.query(LmsEnrollment)
+        .filter(
+            LmsEnrollment.learner_id == CURRENT_USER_ID,
+            LmsEnrollment.course_id == course_id
+        )
+        .first()
+    )
+
+    if existing:
+        return {
+            "success": True,
+            "message": "You are already enrolled in this course.",
+            "enrollment_id": existing.id
+        }
+
+    enrollment = LmsEnrollment(
+        learner_id=CURRENT_USER_ID,
+        course_id=course_id,
+        progress_percent=0,
+        completed_lectures_json="[]"
+    )
+
+    db.add(enrollment)
+    db.commit()
+    db.refresh(enrollment)
+
+    return {
+        "success": True,
+        "message": "Enrollment successful.",
+        "enrollment_id": enrollment.id
+    }
+
+
+@app.post("/api/courses/{course_id}/payment")
+def process_dummy_payment(
+    course_id: int,
+    db: Session = Depends(get_db)
+):
+    course = db.query(CampusCourse).filter(
+        CampusCourse.id == course_id
+    ).first()
+
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    # Free courses do not require payment
+    if course.fee_type == "Free":
+        raise HTTPException(
+            status_code=400,
+            detail="This course is free. Payment is not required."
+        )
+
+    # Dummy payment only
+    return {
+        "success": True,
+        "payment_status": "SUCCESS",
+        "payment_id": f"DEMO-PAY-{course_id}-{CURRENT_USER_ID}",
+        "message": "Demo payment successful."
+    }
+
 # --- EXISTING JOBS AGGREGATOR ENDPOINTS ---
 @app.get("/api/jobs", response_model=List[JobSearchResponse])
 def get_jobs(db: Session = Depends(get_db)):

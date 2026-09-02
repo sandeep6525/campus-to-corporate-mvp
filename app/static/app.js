@@ -899,26 +899,285 @@ async function loadGlobalCoursesPayload() {
     const courses = await res.json();
 
     const grid = document.getElementById("global-courses-grid");
+
     if (courses && courses.length > 0) {
       grid.innerHTML = courses.map(c => `
         <div class="card glass shadow flex-column gap">
+          
           <div class="row between">
             <span class="pill-indicator pill-gray">${c.tier}</span>
-            <span class="pill-indicator ${c.fee_type === 'Free' ? 'pill-green' : 'pill-orange'}">${c.fee_type}</span>
+
+            <span class="pill-indicator ${c.fee_type === "Free"
+          ? "pill-green"
+          : "pill-orange"
+        }">
+              ${c.fee_type}
+            </span>
           </div>
+
           <div>
             <h4>${c.title}</h4>
-            <span class="small-text muted">Offered by: ${c.provider} (${c.origin})</span>
+
+            <span class="small-text muted">
+              Offered by: ${c.provider} (${c.origin})
+            </span>
           </div>
+
           <div class="row between margin-top pt-2 border-top align-center">
-            ${c.coupon_code ? `<span class="small-text font-mono text-green">Coupon: <code>${c.coupon_code}</code></span>` : '<span></span>'}
-            <a href="${c.direct_url}" target="_blank" class="primary-btn small-text" style="text-decoration:none;">Enroll Course</a>
+
+            ${c.coupon_code
+          ? `<span class="small-text font-mono text-green">
+                     Coupon: <code>${c.coupon_code}</code>
+                   </span>`
+          : "<span></span>"
+        }
+
+            <button
+              class="primary-btn small-text"
+              onclick="handleCampusCourseEnrollment(${c.id})"
+            >
+              Enroll Course
+            </button>
+
           </div>
+
         </div>
       `).join("");
     }
+
   } catch (err) {
-    console.error(err);
+    console.error("Failed to load campus courses:", err);
+  }
+}
+
+async function handleCampusCourseEnrollment(courseId) {
+  try {
+    // Get course information
+    const coursesResponse = await fetch("/api/courses/campus");
+    const courses = await coursesResponse.json();
+
+    const course = courses.find(c => c.id === courseId);
+
+    if (!course) {
+      alert("Course not found.");
+      return;
+    }
+
+    // FREE COURSE
+    if (course.fee_type === "Free") {
+
+      const response = await fetch(
+        `/api/courses/${courseId}/enroll`,
+        {
+          method: "POST"
+        }
+      );
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        alert(data.detail || "Enrollment failed.");
+        return;
+      }
+
+      alert(
+        `Enrollment Successful! ✅\n\n${course.title}`
+      );
+
+      // Open the original course website
+      if (course.direct_url) {
+        window.open(course.direct_url, "_blank");
+      }
+
+      return;
+    }
+
+    // PAID COURSE
+    showDummyPaymentScreen(course);
+
+  } catch (err) {
+    console.error("Enrollment error:", err);
+    alert("Something went wrong. Please try again.");
+  }
+}
+
+
+function showDummyPaymentScreen(course) {
+
+  const existing = document.getElementById("dummy-payment-modal");
+
+  if (existing) {
+    existing.remove();
+  }
+
+  const modal = document.createElement("div");
+
+  modal.id = "dummy-payment-modal";
+
+  modal.innerHTML = `
+    <div style="
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      padding: 20px;
+    ">
+
+      <div class="card glass shadow" style="
+        width: 100%;
+        max-width: 480px;
+        padding: 28px;
+      ">
+
+        <div class="row between">
+          <h3>Course Payment</h3>
+
+           <button
+  type="button"
+  class="secondary-btn"
+  id="close-dummy-payment-btn"
+>
+  ✕
+</button>
+        </div>
+
+        <div class="border-top pt-3 margin-top">
+
+          <h4>${course.title}</h4>
+
+          <p class="muted small-text">
+            Offered by: ${course.provider}
+          </p>
+
+          <div class="card glass margin-top">
+            <div class="row between">
+              <span>Course Fee</span>
+              <strong>₹999</strong>
+            </div>
+
+            ${course.coupon_code
+      ? `
+                  <div class="row between margin-top">
+                    <span>Coupon</span>
+                    <code>${course.coupon_code}</code>
+                  </div>
+
+                  <div class="row between margin-top">
+                    <span>Discount</span>
+                    <strong>100%</strong>
+                  </div>
+                `
+      : ""
+    }
+
+            <div class="row between margin-top border-top pt-2">
+              <strong>Total</strong>
+              <strong class="text-green">
+                ${course.coupon_code ? "₹0" : "₹999"}
+              </strong>
+            </div>
+          </div>
+
+          <p class="small-text muted margin-top">
+            This is a demo payment. No real money will be charged.
+          </p>
+
+          <button
+            id="dummy-pay-now-btn"
+            class="primary-btn"
+            style="width:100%; margin-top:16px;"
+            onclick="processDummyCoursePayment(${course.id})"
+          >
+            Pay Now
+          </button>
+
+        </div>
+
+      </div>
+
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+  const closeButton = document.getElementById("close-dummy-payment-btn");
+
+  if (closeButton) {
+    closeButton.addEventListener("click", () => {
+      const modal = document.getElementById("dummy-payment-modal");
+      if (modal) {
+        modal.remove();
+      }
+    });
+  }
+}
+
+async function processDummyCoursePayment(courseId) {
+
+  const button = document.getElementById("dummy-pay-now-btn");
+
+  if (button) {
+    button.disabled = true;
+    button.innerText = "Processing...";
+  }
+
+  try {
+
+    // Step 1: Dummy payment
+    const paymentResponse = await fetch(
+      `/api/courses/${courseId}/payment`,
+      {
+        method: "POST"
+      }
+    );
+
+    const paymentData = await paymentResponse.json();
+
+    if (!paymentResponse.ok) {
+      alert(paymentData.detail || "Payment failed.");
+      return;
+    }
+
+    // Step 2: Enroll after successful payment
+    const enrollmentResponse = await fetch(
+      `/api/courses/${courseId}/enroll`,
+      {
+        method: "POST"
+      }
+    );
+
+    const enrollmentData = await enrollmentResponse.json();
+
+    if (!enrollmentResponse.ok) {
+      alert(
+        enrollmentData.detail ||
+        "Payment succeeded but enrollment failed."
+      );
+      return;
+    }
+
+    closeDummyPaymentScreen();
+
+    alert(
+      "Demo Payment Successful! ✅\n\n" +
+      "Enrollment Successful! 🎓"
+    );
+
+  } catch (err) {
+
+    console.error("Payment error:", err);
+
+    alert("Payment processing failed.");
+
+  } finally {
+
+    if (button) {
+      button.disabled = false;
+      button.innerText = "Pay Now";
+    }
+
   }
 }
 
