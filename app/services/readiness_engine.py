@@ -4,6 +4,10 @@ from collections import defaultdict
 from typing import Any
 
 
+from typing import Any
+import time
+
+
 UNIVERSAL_FLOW = [
     {
         "stage": "Dream",
@@ -718,6 +722,13 @@ def get_platform_framework() -> dict[str, Any]:
     }
 
 
+rag_cag_metrics = {
+    "latency_rag_ms": 0,
+    "latency_cag_ms": 0,
+    "cache_hits": 0
+}
+
+
 def _clamp_score(value: Any, default: int = 50) -> int:
     try:
         parsed = int(value)
@@ -1246,6 +1257,15 @@ def seed_database_content(db):
 # RAG search query
 def query_rag_context(db, query: str) -> str:
     from .. import models
+    start_time = time.perf_counter()
+    
+    # Simulate CAG cache check
+    cag_hit = db.query(models.CagCacheRegistry).filter(models.CagCacheRegistry.doc_title.ilike(f"%{query}%")).first()
+    if cag_hit:
+        rag_cag_metrics["cache_hits"] += 1
+        rag_cag_metrics["latency_cag_ms"] = int((time.perf_counter() - start_time) * 1000)
+        return f"Cached Document [{cag_hit.doc_title}]: Pre-cached context."
+
     docs = db.query(models.VectorDocument).all()
     best_doc = None
     best_matches = 0
@@ -1255,6 +1275,9 @@ def query_rag_context(db, query: str) -> str:
         if matches > best_matches:
             best_matches = matches
             best_doc = doc
+            
+    rag_cag_metrics["latency_rag_ms"] = int((time.perf_counter() - start_time) * 1000)
+    
     if best_doc:
         return f"Document [{best_doc.title}]: {best_doc.content}"
     return "No documentation matches found in RAG registry."

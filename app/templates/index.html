@@ -92,7 +92,7 @@
         </div>
         <div class="top-bar-actions">
           <div class="sync-status">
-            <span class="pill-indicator pill-green">Local Encryption (AES-256) Enabled</span>
+            <span class="pill-indicator pill-green">Local Encryption (App-Layer Field Encryption)</span>
           </div>
           <div class="profile-chip">
             <span class="avatar-letter">L</span>
@@ -669,8 +669,8 @@
         <div class="grid grid-3 gap margin-bottom">
           <div class="card glass shadow text-center">
             <span class="small-text uppercase text-green">Database Encryption</span>
-            <h2 class="margin-top-5 text-green">AES-256 Enabled</h2>
-            <p class="muted small-text">Sqlite3 tables encrypted with secure local block keys.</p>
+            <h2 class="margin-top-5 text-green">App-Layer Field Encryption</h2>
+            <p class="muted small-text">Sensitive profile data encrypted via Fernet cryptography (App-Layer). Full SQLite-at-rest encryption is deferred.</p>
           </div>
           <div class="card glass shadow text-center">
             <span class="small-text uppercase text-blue">Transport Compliance</span>

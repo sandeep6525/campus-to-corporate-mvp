@@ -1314,11 +1314,19 @@ async function loadJobsPayload() {
             </span>
 
             <!-- Apply -->
+            <button
+              class="primary-btn small-text"
+              style="margin-top:6px;"
+              onclick="applyToJob(${j.id}, this)"
+            >
+              Apply (1-Click)
+            </button>
+            
             <a
               href="${j.url}"
               target="_blank"
               class="secondary-btn small-text"
-              style="text-decoration:none; margin-top:6px;"
+              style="text-decoration:none; margin-top:6px; display:block;"
             >
               Apply Direct
             </a>
@@ -1331,6 +1339,36 @@ async function loadJobsPayload() {
 
   } catch (err) {
     console.error("Failed to load jobs:", err);
+  }
+}
+
+async function applyToJob(jobId, btn) {
+  const originalText = btn.innerText;
+  btn.innerText = "Applying...";
+  btn.disabled = true;
+  
+  try {
+    const res = await fetch(`/api/jobs/${jobId}/apply`, { method: "POST" });
+    const data = await res.json();
+    if (res.ok) {
+      btn.innerText = "✓ Applied";
+      btn.classList.remove("primary-btn");
+      btn.classList.add("secondary-btn");
+      
+      // Refresh dashboard timeline if framework is open
+      const timeline = document.getElementById("dashboard-proceedings-timeline");
+      if (timeline && timeline.innerHTML) {
+        // Option to reload dashboard payload or just let it be until they switch tabs
+      }
+    } else {
+      alert(data.detail || "Failed to apply");
+      btn.innerText = originalText;
+      btn.disabled = false;
+    }
+  } catch(e) {
+    alert("Network error.");
+    btn.innerText = originalText;
+    btn.disabled = false;
   }
 }
 
@@ -1550,8 +1588,11 @@ async function loadFrameworkPayload(subtab) {
           <div class="grid grid-2 gap margin-top">
             ${data.universal_flow.map(f => `
               <div class="card glass py-2 px-3">
-                <span class="small-text uppercase text-blue font-bold">Stage: ${f.stage}</span>
-                <h5>Key Purpose: ${f.purpose}</h5>
+                <div class="flex-row justify-between align-center">
+                  <span class="small-text uppercase text-blue font-bold">Stage: ${f.stage}</span>
+                  ${f.completed ? '<span class="badge green">✓ Completed</span>' : '<span class="badge muted">○ Not started</span>'}
+                </div>
+                <h5 class="margin-top-5">Key Purpose: ${f.purpose}</h5>
                 <p class="small-text muted">Trigger Check: ${f.key_question}</p>
                 <p class="small-text text-green">Output: ${f.output}</p>
               </div>

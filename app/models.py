@@ -1,6 +1,7 @@
 from sqlalchemy import String, Integer, ForeignKey, Text, DateTime, func, Boolean, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .db import Base
+from .encryption import EncryptedString
 
 
 class User(Base):
@@ -20,10 +21,10 @@ class LearnerProfile(Base):
     stream: Mapped[str] = mapped_column(String(120), default="Engineering and Technology")
     experience_level: Mapped[str] = mapped_column(String(60), default="Fresher")
     location: Mapped[str] = mapped_column(String(120), default="Global")
-    dream_statement: Mapped[str] = mapped_column(Text, nullable=True)
-    purpose_statement: Mapped[str] = mapped_column(Text, nullable=True)
-    strengths: Mapped[str] = mapped_column(Text, nullable=True)
-    fears: Mapped[str] = mapped_column(Text, nullable=True)
+    dream_statement: Mapped[str] = mapped_column(EncryptedString, nullable=True)
+    purpose_statement: Mapped[str] = mapped_column(EncryptedString, nullable=True)
+    strengths: Mapped[str] = mapped_column(EncryptedString, nullable=True)
+    fears: Mapped[str] = mapped_column(EncryptedString, nullable=True)
     target_roles: Mapped[str] = mapped_column(Text, nullable=True)
     country: Mapped[str] = mapped_column(String(40), default="Global")
     language: Mapped[str] = mapped_column(String(40), default="English")
@@ -460,3 +461,14 @@ class MediaAsset(Base):
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     answer: Mapped["Answer"] = relationship(back_populates="media")
+
+
+class JobApplication(Base):
+    __tablename__ = "job_applications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    learner_id: Mapped[int] = mapped_column(Integer, index=True)
+    job_id: Mapped[int] = mapped_column(Integer, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="Applied")
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+

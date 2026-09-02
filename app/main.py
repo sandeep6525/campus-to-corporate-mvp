@@ -332,8 +332,20 @@ def health():
 
 
 @app.get("/api/framework")
-def framework_details():
-    return get_platform_framework()
+def framework_details(db: Session = Depends(get_db)):
+    base_framework = get_platform_framework()
+    # Fetch learner's proceedings
+    proceedings = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID).all()
+    completed_stages = {p.flow_stage: p.created_at for p in proceedings}
+    
+    for flow in base_framework["universal_flow"]:
+        if flow["stage"] in completed_stages:
+            flow["completed"] = True
+            flow["completed_at"] = completed_stages[flow["stage"]].isoformat() if completed_stages[flow["stage"]] else None
+        else:
+            flow["completed"] = False
+            flow["completed_at"] = None
+    return base_framework
 
 
 @app.post("/api/readiness/diagnose")
@@ -403,6 +415,10 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
             status="Active"
         )
         db.add(db_plan)
+        db.commit()
+
+        if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Design").count() == 0:
+            log_readiness_proceeding(db, CURRENT_USER_ID, "Design", "Generated active Learning Plan from diagnostics.", {}, "Follow the weekly plan items to improve readiness.")
 
     db.commit()
 
@@ -598,6 +614,10 @@ def upload_learner_certification(
     db.add(cert)
     db.commit()
     db.refresh(cert)
+
+    if cert.verification_status == "Verified" and db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Grow").count() == 0:
+        log_readiness_proceeding(db, CURRENT_USER_ID, "Grow", f"Added verified credential: {cert.name}", {}, "Continue acquiring verified credentials.")
+
     return cert
 
 
@@ -652,6 +672,9 @@ def calculate_career_shift(payload: CareerShiftRequest, db: Session = Depends(ge
     db.add(matrix)
     db.commit()
 
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Discover").count() == 0:
+        log_readiness_proceeding(db, CURRENT_USER_ID, "Discover", "Calculated career capability delta for shift.", {"gaps": gaps}, "Review identified gaps and begin learning.")
+
     return CareerShiftResponse(
         transferable_skills=transferable,
         gaps=gaps,
@@ -701,6 +724,10 @@ def book_mentorship_appointment(payload: MentorshipBookRequest, db: Session = De
     db.add(session)
     db.commit()
     db.refresh(session)
+
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Adopt").count() == 0:
+        log_readiness_proceeding(db, CURRENT_USER_ID, "Adopt", f"Booked 1-on-1 mentorship session with {payload.mentor_name}.", {"mentor": payload.mentor_name}, "Prepare your questions for the mentorship session.")
+
     return session
 
 
@@ -1032,6 +1059,28 @@ def get_jobs(db: Session = Depends(get_db)):
 
     return results
 
+
+@app.post("/api/jobs/{job_id}/apply")
+def apply_to_job(job_id: int, db: Session = Depends(get_db)):
+    from .models import JobApplication
+    job = db.query(ExistingJob).filter(ExistingJob.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    existing_app = db.query(JobApplication).filter(JobApplication.learner_id == CURRENT_USER_ID, JobApplication.job_id == job_id).first()
+    if existing_app:
+        raise HTTPException(status_code=400, detail="Already applied to this job")
+        
+    app_record = JobApplication(learner_id=CURRENT_USER_ID, job_id=job_id)
+    db.add(app_record)
+    db.commit()
+    
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Deploy").count() == 0:
+        log_readiness_proceeding(db, CURRENT_USER_ID, "Deploy", f"Applied to job: {job.title}", {"job_id": job_id}, "Prepare for potential recruiter interviews.")
+        
+    return {"status": "success", "message": "Applied successfully"}
+
+
 # --- ASPERION INTERNAL LMS ENDPOINTS ---
 @app.get("/api/lms/courses", response_model=List[LmsCourseResponse])
 def get_lms_courses(db: Session = Depends(get_db)):
@@ -1108,6 +1157,14 @@ def update_lms_progress(course_id: int, lecture_id: int, db: Session = Depends(g
         "Continue completing LMS lessons to unlock certifications."
     )
     
+    # Trigger Closed-loop Feedback
+    process_feedback_loop_trigger(
+        db, 
+        CURRENT_USER_ID, 
+        f"LMS Lesson Completion: Reached {enr.progress_percent}%", 
+        enr.progress_percent
+    )
+
     return {"progress_percent": enr.progress_percent}
 
 
@@ -1146,6 +1203,7 @@ def create_lms_collaboration_post(course_id: int, payload: LmsPostRequest, db: S
 # --- RAG / CAG / KNOWLEDGE GRAPH API ENDPOINTS ---
 @app.get("/api/rag-cag/status")
 def get_rag_cag_status(db: Session = Depends(get_db)):
+    from app.services.readiness_engine import rag_cag_metrics
     docs_count = db.query(VectorDocument).count()
     caches_count = db.query(CagCacheRegistry).count()
     return {
@@ -1153,9 +1211,9 @@ def get_rag_cag_status(db: Session = Depends(get_db)):
         "cag_cached_docs_count": caches_count,
         "rag_status": "Enabled" if docs_count > 0 else "Disabled",
         "cag_status": "Pre-loaded in Model Context" if caches_count > 0 else "None",
-        "latency_cag_ms": 12,
-        "latency_rag_ms": 280,
-        "cache_hits": 45
+        "latency_cag_ms": rag_cag_metrics["latency_cag_ms"],
+        "latency_rag_ms": rag_cag_metrics["latency_rag_ms"],
+        "cache_hits": rag_cag_metrics["cache_hits"]
     }
 
 
@@ -1682,6 +1740,9 @@ def get_report(session_id: int, db: Session = Depends(get_db)):
     avg_overall = round(sum(overall_scores) / len(overall_scores)) if overall_scores else 0
     avg_clarity = round(sum(clarity_scores) / len(clarity_scores)) if clarity_scores else 0
     avg_confidence = round(sum(confidence_scores) / len(confidence_scores)) if confidence_scores else 0
+
+    if session_obj.status == "Completed" and db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Demonstrate").count() == 0:
+        log_readiness_proceeding(db, CURRENT_USER_ID, "Demonstrate", f"Generated Mock Interview report (Score: {avg_overall}).", {"score": avg_overall}, "Review interview feedback and improve.")
 
     return ReportResponse(
         session_id=session_obj.id,
