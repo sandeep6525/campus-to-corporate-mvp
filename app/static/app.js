@@ -202,14 +202,14 @@ function adjustRoleVisibilities() {
 async function loadDashboardPayload() {
   try {
     // 1. Fetch scorecard & context factors
-    const resProfile = await fetch("/api/learner/profile");
+    const resProfile = await fetch("/api/learner/profile", { cache: "no-store" });
     const profile = await resProfile.json();
 
-    const resContext = await fetch("/api/learner/context");
+    const resContext = await fetch("/api/learner/context", { cache: "no-store" });
     const context = await resContext.json();
 
     // 2. Fetch proceedings timeline
-    const resProcs = await fetch("/api/readiness/proceedings");
+    const resProcs = await fetch("/api/readiness/proceedings", { cache: "no-store" });
     const procs = await resProcs.json();
 
     // Render scorecard radial gauge & details
@@ -218,8 +218,20 @@ async function loadDashboardPayload() {
       if (latestSnapshot && Object.keys(latestSnapshot).length > 0) {
         document.getElementById("dashboard-cari-val").textContent = latestSnapshot.CARI || latestSnapshot.total_score;
         document.getElementById("dashboard-ccq-val").textContent = latestSnapshot.CCQ || "--";
-        document.getElementById("dashboard-res-val").textContent = latestSnapshot.total_score || "--";
-        document.getElementById("dashboard-base-val").textContent = latestSnapshot.total_score || "--";
+        document.getElementById("dashboard-res-val").textContent = latestSnapshot.resilience_index || "--";
+        document.getElementById("dashboard-base-val").textContent = "--";
+
+        document.getElementById("progress-comparison-pane").innerHTML = `
+          <div class="row between align-center py-2">
+            <span>Latest CARI</span>
+            <strong>${latestSnapshot.CARI || '--'}</strong>
+          </div>
+          <div class="row between align-center py-2">
+            <span>Latest CCQ</span>
+            <strong>${latestSnapshot.CCQ || '--'}</strong>
+          </div>
+          <p class="muted text-center py-2 small-text">Dashboard synced with current diagnostic state.</p>
+        `;
 
         // update cgi
         document.getElementById("cgi-val").textContent = `${latestSnapshot.total_score - context.confidence_baseline}%`;
@@ -441,7 +453,7 @@ async function addLearnerSkill() {
   const name = document.getElementById("skill-name").value;
   const category = document.getElementById("skill-category").value;
   const proficiency = document.getElementById("skill-proficiency").value;
-  if (!name.strip()) return;
+  if (!name.trim()) return;
 
   try {
     await fetch("/api/learner/skills", {
@@ -1732,7 +1744,7 @@ async function resolveHitlTask(hitlId, decision) {
 
 async function loadMentorRosterPayload() {
   try {
-    const res = await fetch("/api/admin/roster");
+    const res = await fetch("/api/admin/roster", { cache: "no-store" });
     const roster = await res.json();
     const container = document.getElementById("mentor-cohort-roster");
     
@@ -1766,7 +1778,7 @@ async function openDiagnosticModal(learnerId) {
   container.innerHTML = `<p>Loading diagnostic data...</p>`;
   
   try {
-    const res = await fetch(`/api/admin/learners/${learnerId}/diagnostics`);
+    const res = await fetch(`/api/admin/learners/${learnerId}/diagnostics`, { cache: "no-store" });
     if (!res.ok) {
       container.innerHTML = `<p class="text-red">Failed to load learner data.</p>`;
       return;

@@ -2,7 +2,7 @@ from pathlib import Path
 import os
 import time
 from typing import List, Dict, Any
-from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File, Form
+from fastapi import FastAPI, Depends, HTTPException, Request, UploadFile, File, Form, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
@@ -173,8 +173,8 @@ async def security_policy_middleware(request: Request, call_next):
     if is_api_request:
         curr_time = time.time()
 
-        # Rate-limit per IP + API endpoint.
-        rate_key = f"{client_ip}:{request.url.path}"
+        # Rate-limit per IP + API endpoint + Method.
+        rate_key = f"{client_ip}:{request.method}:{request.url.path}"
 
         last_time = _rate_limits.get(rate_key, 0)
 
@@ -303,7 +303,9 @@ async def security_policy_middleware(request: Request, call_next):
 
 
 # --- Mock Authentication switcher ---
+
 CURRENT_USER_ID = 1
+
 
 @app.get("/api/auth/current")
 def get_current_user(db: Session = Depends(get_db)):
@@ -314,8 +316,7 @@ def get_current_user(db: Session = Depends(get_db)):
 
 
 @app.post("/api/auth/role")
-def switch_active_role(role: str, db: Session = Depends(get_db)):
-    global CURRENT_USER_ID
+def switch_role(role: str, db: Session = Depends(get_db)):
     u = db.get(User, CURRENT_USER_ID)
     if not u:
         u = db.query(User).first()
@@ -431,7 +432,7 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
         CURRENT_USER_ID,
         "Diagnose",
         "Completed comprehensive diagnostic assessment.",
-        {"total_score": scorecard["total_score"], "CARI": scorecard["CARI"], "CCQ": scorecard["CCQ"]},
+        {"total_score": scorecard["total_score"], "CARI": scorecard["CARI"], "CCQ": scorecard["CCQ"], "resilience_index": scorecard["resilience_index"]},
         diag["next_best_action"]
     )
     
@@ -1363,6 +1364,13 @@ def resolve_hitl_task(hitl_id: int, decision: str = Form(...), reviewer_notes: s
 @app.get("/api/admin/roster", response_model=List[MentorRosterItemResponse])
 def get_mentor_roster(db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role == "Learner").all()
+    
+    # MVP specific: include CURRENT_USER_ID if they have learner data but aren't currently role="Learner"
+    current_user = db.get(User, CURRENT_USER_ID)
+    if current_user and current_user.role != "Learner":
+        if db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first():
+            if not any(u.id == CURRENT_USER_ID for u in users):
+                users.append(current_user)
     roster = []
     for user in users:
         profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
@@ -1386,7 +1394,9 @@ def get_mentor_roster(db: Session = Depends(get_db)):
 @app.get("/api/admin/learners/{learner_id}/diagnostics", response_model=MentorDiagnosticSnapshotResponse)
 def get_learner_diagnostics(learner_id: int, db: Session = Depends(get_db)):
     user = db.get(User, learner_id)
-    if not user or user.role != "Learner":
+    if not user:
+        raise HTTPException(status_code=404, detail="Learner not found")
+    if user.role != "Learner" and user.id != CURRENT_USER_ID:
         raise HTTPException(status_code=404, detail="Learner not found")
 
     profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
@@ -1414,7 +1424,7 @@ def get_learner_diagnostics(learner_id: int, db: Session = Depends(get_db)):
         "readiness_level": scorecard.readiness_level if scorecard else None,
         "scorecard": scorecard_dict,
         "gaps": [{"gap_type": g.gap_type, "severity": g.severity, "symptoms": g.symptoms} for g in gaps],
-        "skills": [{"skill_name": s.skill_name, "proficiency_level": s.proficiency_level} for s in skills]
+        "skills": [{"skill_name": s.name, "proficiency_level": s.proficiency} for s in skills]
     }
 
 
