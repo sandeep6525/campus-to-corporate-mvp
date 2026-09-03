@@ -778,16 +778,9 @@
           <!-- Student diagnostic roster -->
           <div class="card glass shadow">
             <h3 class="card-title">Assigned Cohort Diagnostic Roster</h3>
-            <p class="muted margin-bottom">Mock list of assigned student scorecards and identified readiness gaps.</p>
-            <div class="flex-column gap">
-              <div class="roster-item card glass py-2 px-3 row between">
-                <div><strong>Rahul Sen</strong><br/><span class="small-text muted">Engineering and Technology</span></div>
-                <div class="text-right"><strong>CARI: 72</strong><br/><span class="small-text text-red">Gap: Clean Code</span></div>
-              </div>
-              <div class="roster-item card glass py-2 px-3 row between">
-                <div><strong>Priya Sharma</strong><br/><span class="small-text muted">Management and Business</span></div>
-                <div class="text-right"><strong>CARI: 54</strong><br/><span class="small-text text-orange">Gap: Pitching</span></div>
-              </div>
+            <p class="muted margin-bottom">Real-time cohort diagnostics based on AI assessment and skills portfolio.</p>
+            <div class="flex-column gap" id="mentor-cohort-roster">
+              <p class="muted">Loading cohort roster...</p>
             </div>
           </div>
         </div>
@@ -855,6 +848,19 @@
   </div>
 
   <!-- ONBOARDING FORM MODAL -->
+  <!-- Diagnostic Modal -->
+  <div class="modal-overlay hidden" id="diagnostic-modal">
+    <div class="modal-card glass shadow flex-column gap">
+      <div class="modal-header row between">
+        <h3>Learner Diagnostic Snapshot</h3>
+        <button class="primary-btn small-text" onclick="closeDiagnosticModal()">Close</button>
+      </div>
+      <div class="modal-body flex-column gap" id="diagnostic-modal-content">
+        <p>Loading...</p>
+      </div>
+    </div>
+  </div>
+
   <div class="modal-overlay hidden" id="onboard-modal">
     <div class="modal-card glass shadow flex-column gap">
       <div class="row between border-bottom pb-2">
@@ -1046,6 +1052,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js?v=1.1"></script>
 </body>
 </html>

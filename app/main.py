@@ -86,6 +86,9 @@ from .schemas import (
     FeedbackLoopResponse,
     PlatformMoatResponse,
     ReadinessProceedingResponse,
+    HitlQueueItemResponse,
+    MentorRosterItemResponse,
+    MentorDiagnosticSnapshotResponse,
 )
 from .services.ai_provider import (
     generate_questions,
@@ -432,6 +435,36 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
         diag["next_best_action"]
     )
     
+    # Update Learner Profile
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first()
+    if not prof:
+        prof = LearnerProfile(user_id=CURRENT_USER_ID)
+        db.add(prof)
+    
+    dp = diag.get("dream_profile", {})
+    if dp:
+        prof.dream_statement = dp.get("dream_statement", prof.dream_statement)
+        prof.purpose_statement = dp.get("purpose_statement", prof.purpose_statement)
+        prof.target_roles = dp.get("target_role", prof.target_roles)
+        prof.stream = dp.get("stream", prof.stream)
+    db.commit()
+    
+    # Insert Gap Reports
+    gaps = diag.get("gaps", [])
+    # First, clear old gaps for baseline
+    db.query(GapReport).filter(GapReport.learner_id == CURRENT_USER_ID).delete()
+    for g in gaps:
+        db.add(GapReport(
+            learner_id=CURRENT_USER_ID,
+            gap_type=g.get("gap_type", "Unknown gap"),
+            symptoms=g.get("symptoms", ""),
+            root_cause=g.get("root_cause", ""),
+            severity=g.get("severity", "medium"),
+            recommended_fix=g.get("recommended_fix", ""),
+            evidence_required=g.get("evidence_required", "Not specified")
+        ))
+    db.commit()
+
     # Process feedback loops check
     process_feedback_loop_trigger(db, CURRENT_USER_ID, f"Diagnose: Scorecard evaluated.", scorecard["total_score"])
 
@@ -608,15 +641,22 @@ def upload_learner_certification(
         issuer=issuer,
         issue_date=issue_date,
         credential_id=credential_id,
-        verification_status="Verified",  # Auto verified mock status
+        verification_status="Pending Review",
         file_url=file_url
     )
     db.add(cert)
     db.commit()
     db.refresh(cert)
 
-    if cert.verification_status == "Verified" and db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Grow").count() == 0:
-        log_readiness_proceeding(db, CURRENT_USER_ID, "Grow", f"Added verified credential: {cert.name}", {}, "Continue acquiring verified credentials.")
+    hitl = HitlReviewQueue(
+        learner_id=CURRENT_USER_ID,
+        reference_id=cert.id,
+        task_type="Certification Review",
+        flag_reason=cert.title,
+        status="Pending"
+    )
+    db.add(hitl)
+    db.commit()
 
     return cert
 
@@ -1246,7 +1286,7 @@ def get_proceedings_timeline(db: Session = Depends(get_db)):
         ))
         db.commit()
     
-    procs = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID).order_by(ReadinessProceeding.created_at.desc()).all()
+    procs = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID).order_by(ReadinessProceeding.created_at.desc(), ReadinessProceeding.id.desc()).all()
     results = []
     for p in procs:
         results.append(ReadinessProceedingResponse(
@@ -1260,20 +1300,123 @@ def get_proceedings_timeline(db: Session = Depends(get_db)):
     return results
 
 
-@app.get("/api/admin/hitl-queue")
+@app.get("/api/admin/hitl-queue", response_model=List[HitlQueueItemResponse])
 def get_hitl_queue(db: Session = Depends(get_db)):
-    return db.query(HitlReviewQueue).all()
+    query = db.query(
+        HitlReviewQueue.id,
+        HitlReviewQueue.learner_id,
+        User.username.label("learner_name"),
+        HitlReviewQueue.task_type,
+        HitlReviewQueue.status,
+        HitlReviewQueue.flag_reason,
+        HitlReviewQueue.reviewer_notes,
+        StudentCertification.title.label("certificate_title"),
+        StudentCertification.issuer.label("issuer"),
+        StudentCertification.credential_id.label("credential_id"),
+        StudentCertification.file_url.label("file_url")
+    ).outerjoin(
+        User, User.id == HitlReviewQueue.learner_id
+    ).outerjoin(
+        StudentCertification, StudentCertification.id == HitlReviewQueue.reference_id
+    ).all()
+    
+    result = []
+    for row in query:
+        result.append({
+            "id": row.id,
+            "learner_id": row.learner_id,
+            "learner_name": row.learner_name,
+            "task_type": row.task_type,
+            "status": row.status,
+            "flag_reason": row.flag_reason,
+            "reviewer_notes": row.reviewer_notes,
+            "certificate_title": row.certificate_title,
+            "issuer": row.issuer,
+            "credential_id": row.credential_id,
+            "file_url": row.file_url
+        })
+    return result
 
 
 @app.post("/api/admin/hitl-queue/{hitl_id}/resolve")
-def resolve_hitl_task(hitl_id: int, reviewer_notes: str = Form(...), db: Session = Depends(get_db)):
+def resolve_hitl_task(hitl_id: int, decision: str = Form(...), reviewer_notes: str = Form(...), db: Session = Depends(get_db)):
     hitl = db.get(HitlReviewQueue, hitl_id)
     if not hitl:
         raise HTTPException(status_code=404, detail="Task not found")
     hitl.status = "Resolved"
     hitl.reviewer_notes = reviewer_notes
+
+    if hitl.task_type == "Certification Review" and hitl.reference_id:
+        cert = db.get(StudentCertification, hitl.reference_id)
+        if cert:
+            if decision == "approve":
+                cert.verification_status = "Verified"
+                if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == hitl.learner_id, ReadinessProceeding.flow_stage == "Grow").count() == 0:
+                    log_readiness_proceeding(db, hitl.learner_id, "Grow", f"Added verified credential: {cert.title}", {}, "Continue acquiring verified credentials.")
+            elif decision == "reject":
+                cert.verification_status = "Rejected"
+
     db.commit()
     return {"message": "Resolved"}
+
+
+@app.get("/api/admin/roster", response_model=List[MentorRosterItemResponse])
+def get_mentor_roster(db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.role == "Learner").all()
+    roster = []
+    for user in users:
+        profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
+        scorecard = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == user.id).order_by(ReadinessScorecard.id.desc()).first()
+        top_gap = db.query(GapReport).filter(GapReport.learner_id == user.id, GapReport.severity == "High").first()
+        if not top_gap:
+            top_gap = db.query(GapReport).filter(GapReport.learner_id == user.id).first()
+
+        roster.append({
+            "learner_id": user.id,
+            "learner_name": user.username,
+            "stream": profile.stream if profile else None,
+            "target_role": profile.target_roles if profile else None,
+            "cari": scorecard.CARI if scorecard else None,
+            "readiness_level": scorecard.readiness_level if scorecard else None,
+            "top_gap": top_gap.gap_type if top_gap else None
+        })
+    return roster
+
+
+@app.get("/api/admin/learners/{learner_id}/diagnostics", response_model=MentorDiagnosticSnapshotResponse)
+def get_learner_diagnostics(learner_id: int, db: Session = Depends(get_db)):
+    user = db.get(User, learner_id)
+    if not user or user.role != "Learner":
+        raise HTTPException(status_code=404, detail="Learner not found")
+
+    profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
+    scorecard = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == user.id).order_by(ReadinessScorecard.id.desc()).first()
+    gaps = db.query(GapReport).filter(GapReport.learner_id == user.id).all()
+    skills = db.query(StudentSkill).filter(StudentSkill.learner_id == user.id).all()
+
+    scorecard_dict = None
+    if scorecard:
+        scorecard_dict = {
+            "CARI": scorecard.CARI,
+            "readiness_level": scorecard.readiness_level,
+            "purpose_clarity": scorecard.purpose_clarity,
+            "communication_readiness": scorecard.communication_readiness,
+            "domain_readiness": scorecard.domain_readiness,
+            "problem_solving": scorecard.problem_solving
+        }
+
+    return {
+        "learner_id": user.id,
+        "learner_name": user.username,
+        "stream": profile.stream if profile else None,
+        "target_roles": profile.target_roles if profile else None,
+        "cari": scorecard.CARI if scorecard else None,
+        "readiness_level": scorecard.readiness_level if scorecard else None,
+        "scorecard": scorecard_dict,
+        "gaps": [{"gap_type": g.gap_type, "severity": g.severity, "symptoms": g.symptoms} for g in gaps],
+        "skills": [{"skill_name": s.skill_name, "proficiency_level": s.proficiency_level} for s in skills]
+    }
+
 
 
 @app.get("/api/admin/security-logs", response_model=List[SecurityPolicyLogResponse])

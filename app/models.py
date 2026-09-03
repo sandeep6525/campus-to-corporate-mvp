@@ -327,6 +327,7 @@ class HitlReviewQueue(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     learner_id: Mapped[int] = mapped_column(Integer, index=True)
+    reference_id: Mapped[int] = mapped_column(Integer, nullable=True)
     task_type: Mapped[str] = mapped_column(String(120))  # final certification, disputed score, safety warning
     flag_reason: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(40), default="Pending")  # Pending, Resolved

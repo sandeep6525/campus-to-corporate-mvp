@@ -1678,20 +1678,27 @@ async function loadFrameworkPayload(subtab) {
 // --- ADMIN PANELS: COHORT, MENTORS, EMPLOYERS ---
 async function loadMentorDeskPayload() {
   try {
+    loadMentorRosterPayload();
     const resHitl = await fetch("/api/admin/hitl-queue");
     const hitl = await resHitl.json();
 
     const container = document.getElementById("mentor-hitl-queue");
     if (hitl && hitl.length > 0) {
       container.innerHTML = hitl.map(h => `
-        <div class="card glass py-2 px-3 row between align-center">
-          <div>
-            <strong>Task Type: ${h.task_type}</strong>
-            <p class="small-text text-red">Reason: ${h.flag_reason}</p>
+        <div class="card glass py-2 px-3 row between align-center margin-bottom-5">
+          <div style="flex: 2;">
+            <strong>Student: ${h.learner_name || 'System'}</strong> | <span class="small-text text-orange">Task: ${h.task_type}</span>
+            <p class="small-text margin-top-5">
+              Certificate: ${h.certificate_title || h.flag_reason}<br/>
+              Issuer: ${h.issuer || 'N/A'} | Credential ID: ${h.credential_id || 'N/A'}<br/>
+              ${h.file_url ? `<a href="${h.file_url}" target="_blank" class="text-blue">📄 View Evidence</a>` : ''}
+            </p>
           </div>
-          <div>
+          <div style="flex: 1; text-align: right;">
+            <p class="small-text margin-bottom-5">Status: ${h.status}</p>
             ${h.status === 'Pending' ? `
-              <button class="primary-btn small-text" onclick="resolveHitlTask(${h.id})">Approve & Resolve</button>
+              <button class="primary-btn small-text" onclick="resolveHitlTask(${h.id}, 'approve')">Approve</button>
+              <button class="primary-btn small-text" style="background: var(--accent-red);" onclick="resolveHitlTask(${h.id}, 'reject')">Reject</button>
             ` : `<span class="pill-indicator pill-green">Resolved</span>`}
           </div>
         </div>
@@ -1704,22 +1711,108 @@ async function loadMentorDeskPayload() {
   }
 }
 
-async function resolveHitlTask(hitlId) {
-  const notes = prompt("Enter reviewer notes/decision remarks:");
+async function resolveHitlTask(hitlId, decision) {
+  const notes = prompt(`Enter reviewer notes/decision remarks for ${decision.toUpperCase()}:`);
   if (notes === null) return;
 
   try {
     const formData = new FormData();
+    formData.append("decision", decision);
     formData.append("reviewer_notes", notes);
     await fetch(`/api/admin/hitl-queue/${hitlId}/resolve`, {
       method: "POST",
       body: formData
     });
-    alert("Task resolved and logged.");
+    alert(`Task ${decision}d and logged.`);
     loadMentorDeskPayload();
   } catch (err) {
     console.error(err);
   }
+}
+
+async function loadMentorRosterPayload() {
+  try {
+    const res = await fetch("/api/admin/roster");
+    const roster = await res.json();
+    const container = document.getElementById("mentor-cohort-roster");
+    
+    if (roster && roster.length > 0) {
+      container.innerHTML = roster.map(r => `
+        <div class="roster-item card glass py-2 px-3 row between align-center margin-bottom-5">
+          <div>
+            <strong>${r.learner_name}</strong><br/>
+            <span class="small-text muted">${r.target_role || r.stream || 'Target Not Set'}</span>
+          </div>
+          <div class="text-right">
+            <strong>CARI: ${r.cari !== null ? r.cari : 'Not assessed'}</strong><br/>
+            <span class="small-text ${r.top_gap ? 'text-orange' : 'text-green'}">Gap: ${r.top_gap || 'No major gap identified'}</span>
+          </div>
+          <div>
+            <button class="primary-btn small-text" onclick="openDiagnosticModal(${r.learner_id})">View Profile</button>
+          </div>
+        </div>
+      `).join("");
+    } else {
+      container.innerHTML = `<p class="muted">No learners available.</p>`;
+    }
+  } catch (err) {
+    console.error("Failed to load roster", err);
+  }
+}
+
+async function openDiagnosticModal(learnerId) {
+  document.getElementById("diagnostic-modal").classList.remove("hidden");
+  const container = document.getElementById("diagnostic-modal-content");
+  container.innerHTML = `<p>Loading diagnostic data...</p>`;
+  
+  try {
+    const res = await fetch(`/api/admin/learners/${learnerId}/diagnostics`);
+    if (!res.ok) {
+      container.innerHTML = `<p class="text-red">Failed to load learner data.</p>`;
+      return;
+    }
+    const data = await res.json();
+    
+    let gapsHtml = data.gaps.length > 0 
+      ? data.gaps.map(g => `<li><strong>${g.gap_type}</strong> (${g.severity}): ${g.symptoms}</li>`).join("")
+      : "<li>No gaps recorded.</li>";
+      
+    let skillsHtml = data.skills.length > 0
+      ? data.skills.map(s => `<span class="pill-indicator">${s.skill_name} (${s.proficiency_level})</span>`).join(" ")
+      : "<span class='muted'>No skills logged.</span>";
+
+    container.innerHTML = `
+      <h4>${data.learner_name} - ${data.target_roles || data.stream || 'Unspecified'}</h4>
+      <div class="grid grid-2 gap">
+        <div class="card glass shadow-sm">
+          <strong>CARI Score:</strong> ${data.cari !== null ? data.cari : 'N/A'}<br/>
+          <strong>Level:</strong> ${data.readiness_level || 'N/A'}
+        </div>
+        <div class="card glass shadow-sm">
+          <strong>Scorecard Highlights:</strong><br/>
+          ${data.scorecard ? `
+            Comm: ${data.scorecard.communication_readiness} | Domain: ${data.scorecard.domain_readiness} <br/>
+            Problem Solving: ${data.scorecard.problem_solving}
+          ` : 'No scorecard available'}
+        </div>
+      </div>
+      <div>
+        <strong>Diagnostic Gaps:</strong>
+        <ul class="margin-top-5 small-text">${gapsHtml}</ul>
+      </div>
+      <div>
+        <strong>Skills:</strong>
+        <div class="margin-top-5">${skillsHtml}</div>
+      </div>
+    `;
+  } catch (err) {
+    console.error(err);
+    container.innerHTML = `<p class="text-red">Error loading diagnostics.</p>`;
+  }
+}
+
+function closeDiagnosticModal() {
+  document.getElementById("diagnostic-modal").classList.add("hidden");
 }
 
 async function loadInstitutionBoardPayload() {

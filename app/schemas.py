@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Dict, Any
 
 class CreateSessionRequest(BaseModel):
@@ -155,6 +155,7 @@ class StudentCertificationRequest(BaseModel):
 
 
 class StudentCertificationResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     id: int
     title: str
     issuer: str
@@ -176,6 +177,26 @@ class StudentLinkResponse(BaseModel):
     linkedin_url: str | None = None
     portfolio_url: str | None = None
     leetcode_url: str | None = None
+
+
+class HitlReviewQueueCreate(BaseModel):
+    task_type: str
+    flag_reason: str
+
+
+class HitlQueueItemResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    learner_id: int
+    learner_name: str | None = None
+    task_type: str
+    status: str
+    certificate_title: str | None = None
+    issuer: str | None = None
+    credential_id: str | None = None
+    file_url: str | None = None
+    flag_reason: str | None = None
+    reviewer_notes: str | None = None
 
 
 class CareerShiftRequest(BaseModel):
@@ -341,3 +362,25 @@ class ReadinessProceedingResponse(BaseModel):
     metrics_snapshot: Dict[str, Any]
     strategic_action: str
     created_at: Any
+
+
+class MentorRosterItemResponse(BaseModel):
+    learner_id: int
+    learner_name: str
+    stream: str | None = None
+    target_role: str | None = None
+    cari: int | None = None
+    readiness_level: str | None = None
+    top_gap: str | None = None
+
+
+class MentorDiagnosticSnapshotResponse(BaseModel):
+    learner_id: int
+    learner_name: str
+    stream: str | None = None
+    target_roles: str | None = None
+    cari: int | None = None
+    readiness_level: str | None = None
+    scorecard: Dict[str, Any] | None = None
+    gaps: List[Dict[str, Any]] = []
+    skills: List[Dict[str, Any]] = []
