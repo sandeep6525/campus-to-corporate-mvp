@@ -89,6 +89,8 @@ from .schemas import (
     HitlQueueItemResponse,
     MentorRosterItemResponse,
     MentorDiagnosticSnapshotResponse,
+    InstitutionAnalyticsResponse,
+    EmployerMatchResponse,
 )
 from .services.ai_provider import (
     generate_questions,
@@ -1065,7 +1067,8 @@ def get_jobs(db: Session = Depends(get_db)):
         missing_skill_names = []
 
         for skill in required_skills:
-            if skill.lower() in student_skill_names:
+            # Substring match: if the required skill is inside any of the user's skills
+            if any(skill.lower() in student_skill for student_skill in student_skill_names):
                 matched_skill_names.append(skill)
             else:
                 missing_skill_names.append(skill)
@@ -1389,6 +1392,97 @@ def get_mentor_roster(db: Session = Depends(get_db)):
             "top_gap": top_gap.gap_type if top_gap else None
         })
     return roster
+
+
+@app.get("/api/institution/analytics", response_model=InstitutionAnalyticsResponse)
+def get_institution_analytics(db: Session = Depends(get_db)):
+    import math
+
+    users = db.query(User).filter(User.role == "Learner").all()
+    current_user = db.get(User, CURRENT_USER_ID)
+    if current_user and current_user.role != "Learner":
+        if db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first():
+            if not any(u.id == CURRENT_USER_ID for u in users):
+                users.append(current_user)
+
+    total_scorecards = 0
+    ready_count = 0
+    total_scores = []
+    
+    purp_sum, comm_sum, dom_sum, port_sum = 0, 0, 0, 0
+
+    learners_resp = []
+
+    for user in users:
+        profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
+        scorecard = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == user.id).order_by(ReadinessScorecard.id.desc()).first()
+        
+        l_target = profile.target_roles if profile else None
+        l_score = scorecard.total_score if scorecard else None
+        l_status = scorecard.readiness_level if scorecard else None
+        
+        learners_resp.append({
+            "learner_id": user.id,
+            "learner_name": user.username,
+            "target_role": l_target,
+            "readiness_score": l_score,
+            "readiness_status": l_status
+        })
+        
+        if scorecard:
+            total_scorecards += 1
+            total_scores.append(scorecard.total_score)
+            if scorecard.total_score >= 75:
+                ready_count += 1
+            purp_sum += scorecard.purpose_clarity
+            comm_sum += scorecard.communication_readiness
+            dom_sum += scorecard.domain_readiness
+            port_sum += scorecard.portfolio_evidence
+
+    # Calc ERR
+    err = 0.0
+    if total_scorecards > 0:
+        err = round((ready_count / total_scorecards) * 100, 1)
+
+    # Calc CSC
+    csc = 0.0
+    if len(total_scores) > 0:
+        mean = sum(total_scores) / len(total_scores)
+        variance = sum((x - mean) ** 2 for x in total_scores) / len(total_scores)
+        csc = round(math.sqrt(variance), 1)
+
+    # Calc SROI
+    enrollments = db.query(LmsEnrollment).filter(LmsEnrollment.learner_id.in_([u.id for u in users])).all()
+    sroi = 0.0
+    if enrollments:
+        sroi = round(sum(e.progress_percent for e in enrollments) / len(enrollments), 1)
+
+    # Calc Gaps
+    def get_status(val: float) -> str:
+        if val >= 75: return "Pass"
+        if val >= 40: return "Deficit"
+        return "Severe Deficit"
+
+    avg_purp = int(purp_sum / total_scorecards) if total_scorecards > 0 else 0
+    avg_comm = int(comm_sum / total_scorecards) if total_scorecards > 0 else 0
+    avg_dom = int(dom_sum / total_scorecards) if total_scorecards > 0 else 0
+    avg_port = int(port_sum / total_scorecards) if total_scorecards > 0 else 0
+
+    gaps = [
+        {"name": "Purpose Clarity", "value": avg_purp, "status": get_status(avg_purp)},
+        {"name": "Communication Readiness", "value": avg_comm, "status": get_status(avg_comm)},
+        {"name": "Domain Technical Readiness", "value": avg_dom, "status": get_status(avg_dom)},
+        {"name": "Portfolio Project Evidence", "value": avg_port, "status": get_status(avg_port)}
+    ]
+
+    return {
+        "employment_readiness_rate": f"{err}%" if total_scorecards > 0 else "--",
+        "cohort_skill_convergence": f"σ = {csc}" if total_scorecards > 0 else "--",
+        "skilling_partner_roi": f"{sroi}%" if enrollments else "--",
+        "competency_gaps": gaps,
+        "cohort_size": len(users),
+        "learners": learners_resp
+    }
 
 
 @app.get("/api/admin/learners/{learner_id}/diagnostics", response_model=MentorDiagnosticSnapshotResponse)
@@ -1913,3 +2007,122 @@ def get_report(session_id: int, db: Session = Depends(get_db)):
         recommended_next_steps=next_steps,
         items=items,
     )
+
+
+# --- EMPLOYER BOARD ENDPOINTS ---
+@app.get("/api/employer/matches", response_model=List[EmployerMatchResponse])
+def get_employer_matches(db: Session = Depends(get_db)):
+    current_user = db.get(User, CURRENT_USER_ID)
+    if not current_user or current_user.role not in ["Employer", "Admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to view candidates")
+        
+    learners = db.query(User).filter(User.role == "Learner").all()
+    
+    # For MVP demo: Include current user if they have a LearnerProfile even if Admin/Employer
+    if current_user and current_user.role != "Learner":
+        if db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first():
+            if not any(u.id == CURRENT_USER_ID for u in learners):
+                learners.append(current_user)
+                
+    jobs = db.query(ExistingJob).all()
+    
+    results = []
+    
+    for learner in learners:
+        profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == learner.id).first()
+        if not profile:
+            continue
+            
+        student_skills = db.query(StudentSkill).filter(StudentSkill.learner_id == learner.id).all()
+        student_skill_names = {s.name.strip().lower() for s in student_skills if s.name}
+        
+        best_match = 0
+        best_matched_skills = []
+        
+        if jobs:
+            for j in jobs:
+                req_skills = [s.strip() for s in j.required_skills.split(",") if s.strip()]
+                matched = []
+                for rs in req_skills:
+                    if any(rs.lower() in ss for ss in student_skill_names):
+                        matched.append(rs)
+                
+                score = round((len(matched) / len(req_skills)) * 100) if req_skills else 0
+                if score >= best_match:
+                    best_match = score
+                    best_matched_skills = matched
+        
+        results.append(
+            EmployerMatchResponse(
+                learner_id=learner.id,
+                candidate_name=learner.username,
+                target_role=profile.target_roles or "Unspecified",
+                stream=profile.stream or "Unspecified",
+                armc_score=best_match,
+                matched_skills=best_matched_skills
+            )
+        )
+        
+    results.sort(key=lambda x: x.armc_score, reverse=True)
+    return results
+
+@app.get("/api/employer/portfolio/{learner_id}/download")
+def download_learner_portfolio(learner_id: int, db: Session = Depends(get_db)):
+    current_user = db.get(User, CURRENT_USER_ID)
+    if not current_user or current_user.role not in ["Employer", "Admin"]:
+        raise HTTPException(status_code=403, detail="Not authorized to download portfolio")
+        
+    learner = db.get(User, learner_id)
+    if not learner:
+        raise HTTPException(status_code=404, detail="Candidate not found")
+        
+    profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == learner.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Candidate profile not found")
+        
+    skills = db.query(StudentSkill).filter(StudentSkill.learner_id == learner_id).all()
+    certs = db.query(StudentCertification).filter(StudentCertification.learner_id == learner_id).all()
+    scorecard = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == learner_id).order_by(ReadinessScorecard.id.desc()).first()
+    lms = db.query(LmsEnrollment).filter(LmsEnrollment.learner_id == learner_id).all()
+    
+    md = []
+    md.append(f"# Professional Portfolio: {learner.username}")
+    md.append(f"**Target Role:** {profile.target_roles or 'Unspecified'}")
+    md.append(f"**Stream:** {profile.stream or 'Unspecified'}")
+    md.append(f"**Experience:** {profile.experience_level or 'Unspecified'}")
+    md.append("\n---")
+    
+    md.append("\n## Professional Skills")
+    if skills:
+        for s in skills:
+            md.append(f"- **{s.name}** ({s.proficiency}) - Verified: {'Yes' if s.verification_status == 'Verified' else 'No'}")
+    else:
+        md.append("- No skills listed.")
+        
+    md.append("\n## Certifications")
+    if certs:
+        for c in certs:
+            status = "Verified" if c.verification_status == "Verified" else "Pending/Unverified"
+            md.append(f"- **{c.title}** ({c.issuer}) - {status}")
+    else:
+        md.append("- No certifications listed.")
+        
+    md.append("\n## LMS Progress")
+    if lms:
+        for e in lms:
+            md.append(f"- Course ID {e.course_id}: {e.progress_percent}% Complete")
+    else:
+        md.append("- No LMS records.")
+        
+    if scorecard:
+        md.append("\n## Aggregate Readiness Assessment")
+        md.append(f"- **Overall Readiness Score:** {scorecard.total_score}/100 ({scorecard.readiness_level})")
+        md.append(f"- **CARI Index:** {scorecard.CARI}")
+        md.append(f"- **Technical/Domain Readiness:** {scorecard.domain_readiness}/100")
+        md.append(f"- **Communication Readiness:** {scorecard.communication_readiness}/100")
+        
+    content = "\n".join(md)
+    headers = {
+        "Content-Disposition": f"attachment; filename=candidate_{learner_id}_portfolio.md"
+    }
+    return Response(content=content, media_type="text/markdown", headers=headers)

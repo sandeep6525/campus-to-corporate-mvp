@@ -1829,6 +1829,41 @@ function closeDiagnosticModal() {
 
 async function loadInstitutionBoardPayload() {
   try {
+    const res = await fetch("/api/institution/analytics", { cache: "no-store" });
+    if (!res.ok) {
+      document.getElementById("inst-err-val").innerText = "API error";
+      document.getElementById("inst-csc-val").innerText = "--";
+      document.getElementById("inst-sroi-val").innerText = "--";
+      return;
+    }
+    const data = await res.json();
+    
+    if (data.cohort_size === 0) {
+      document.getElementById("inst-err-val").innerText = "No cohort data";
+      document.getElementById("inst-csc-val").innerText = "--";
+      document.getElementById("inst-sroi-val").innerText = "--";
+      document.getElementById("inst-heatmap").innerHTML = `<p class="muted">Insufficient data</p>`;
+    } else {
+      document.getElementById("inst-err-val").innerText = data.employment_readiness_rate;
+      document.getElementById("inst-csc-val").innerText = data.cohort_skill_convergence;
+      document.getElementById("inst-sroi-val").innerText = data.skilling_partner_roi;
+      
+      const heatmap = document.getElementById("inst-heatmap");
+      heatmap.innerHTML = "";
+      data.competency_gaps.forEach(gap => {
+        let pillColor = "pill-orange";
+        if (gap.status === "Pass") pillColor = "pill-green";
+        else if (gap.status === "Severe Deficit") pillColor = "pill-red";
+        
+        heatmap.insertAdjacentHTML('beforeend', `
+          <div class="row between py-1 border-bottom">
+            <span class="small-text font-bold">${gap.name}:</span>
+            <span class="pill-indicator ${pillColor}">${gap.value}% ${gap.status}</span>
+          </div>
+        `);
+      });
+    }
+
     // Seed and load partnership ROI
     const list = document.getElementById("institution-collaborations-list");
     list.innerHTML = `
@@ -1843,26 +1878,55 @@ async function loadInstitutionBoardPayload() {
     `;
   } catch (err) {
     console.error(err);
+    const errEl = document.getElementById("inst-err-val");
+    if (errEl) errEl.innerText = "API error";
   }
 }
 
 async function loadEmployerBoardPayload() {
   try {
     const container = document.getElementById("employer-job-matches");
-    container.innerHTML = `
-      <div class="card glass py-2 px-3 row between align-center">
-        <div>
-          <h4>Applicant: Rahul Sen</h4>
-          <span class="small-text muted">Target: Junior Python Engineer | Stream: Eng Track</span>
+    container.innerHTML = "<p>Loading candidate matches...</p>";
+    
+    const resp = await fetch("/api/employer/matches");
+    if (!resp.ok) {
+      container.innerHTML = "<p class='error-text'>Failed to load candidate matches or unauthorized.</p>";
+      return;
+    }
+    
+    const matches = await resp.json();
+    if (!matches || matches.length === 0) {
+      container.innerHTML = "<p class='muted'>No candidate matches found.</p>";
+      return;
+    }
+    
+    let html = "";
+    matches.forEach(m => {
+      let skillsHtml = "";
+      if (m.matched_skills && m.matched_skills.length > 0) {
+        skillsHtml = `<span class="small-text muted">Matched Skills: ${m.matched_skills.join(", ")}</span>`;
+      }
+      
+      html += `
+        <div class="card glass py-2 px-3 row between align-center margin-bottom">
+          <div>
+            <h4>Applicant: ${m.candidate_name}</h4>
+            <span class="small-text muted">Target: ${m.target_role} | Stream: ${m.stream}</span><br/>
+            ${skillsHtml}
+          </div>
+          <div class="text-right">
+            <strong>Aspiration Match (ARMC): ${m.armc_score}%</strong><br/>
+            <button class="primary-btn small-text margin-top-5" onclick="window.location.href='/api/employer/portfolio/${m.learner_id}/download'">Get Portfolio</button>
+          </div>
         </div>
-        <div class="text-right">
-          <strong>Aspiration Match (ARMC): 94%</strong><br/>
-          <button class="primary-btn small-text margin-top-5" onclick="alert('Applicant portfolio downloaded locally.')">Get Portfolio</button>
-        </div>
-      </div>
-    `;
+      `;
+    });
+    
+    container.innerHTML = html;
   } catch (err) {
     console.error(err);
+    const container = document.getElementById("employer-job-matches");
+    container.innerHTML = "<p class='error-text'>An error occurred while fetching candidates.</p>";
   }
 }
 

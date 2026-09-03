@@ -1,0 +1,860 @@
+[
+    {
+        "test": "Persona Switch - Learner",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "username": "fresha_aspirant",
+            "role": "Learner"
+        }
+    },
+    {
+        "test": "Learner Onboarding",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "journey_stage": "Diagnosed",
+            "next_best_action": "Compare three target roles and write a one-page role reality map.",
+            "dream_profile": {
+                "dream_statement": "My dream direction is target role.",
+                "purpose_statement": "I want this because the learner wants to build a meaningful future.",
+                "impact_statement": "The impact I want to create is to create useful impact through consistent capability-building.",
+                "identity_growth_statement": "The kind of person I must become is a reliable, adaptable, evidence-driven professional.",
+                "target_role": "target role",
+                "stream": "Engineering and Technology"
+            },
+            "career_pathway": {
+                "entry_level_roles": [
+                    "software developer",
+                    "data analyst",
+                    "AI/ML engineer",
+                    "cloud engineer",
+                    "cybersecurity analyst"
+                ],
+                "required_skills": [
+                    "programming fundamentals",
+                    "DSA",
+                    "Git/GitHub",
+                    "cloud fundamentals",
+                    "AI/ML basics",
+                    "technical writing"
+                ],
+                "portfolio_evidence": [
+                    "GitHub portfolio",
+                    "deployed project",
+                    "technical blog",
+                    "hackathon",
+                    "internship or open-source contribution"
+                ],
+                "growth_view": {
+                    "3_year": "Build role fluency, portfolio depth, and first real-world outcomes.",
+                    "5_year": "Own larger projects, mentor juniors, and specialize in a high-value track.",
+                    "10_year": "Lead teams, products, practices, ventures, or advanced domain work."
+                }
+            },
+            "scorecard": {
+                "total_score": 58,
+                "level": "Emerging",
+                "meaning": "Has potential, needs structure",
+                "CARI": 55,
+                "CCQ": 45,
+                "resilience_index": 60,
+                "dimensions": [
+                    {
+                        "key": "purpose_clarity",
+                        "label": "Purpose clarity",
+                        "weight": 10,
+                        "layer": "Personal",
+                        "score": 55
+                    },
+                    {
+                        "key": "self_awareness_confidence",
+                        "label": "Self-awareness and confidence",
+                        "weight": 10,
+                        "layer": "Personal",
+                        "score": 55
+                    },
+                    {
+                        "key": "communication_readiness",
+                        "label": "Communication readiness",
+                        "weight": 15,
+                        "layer": "Professional",
+                        "score": 55
+                    },
+                    {
+                        "key": "digital_ai_readiness",
+                        "label": "Digital and AI readiness",
+                        "weight": 10,
+                        "layer": "Future",
+                        "score": 55
+                    },
+                    {
+                        "key": "domain_technical_readiness",
+                        "label": "Domain/technical readiness",
+                        "weight": 15,
+                        "layer": "Technical / Domain",
+                        "score": 55
+                    },
+                    {
+                        "key": "problem_solving_readiness",
+                        "label": "Problem-solving readiness",
+                        "weight": 10,
+                        "layer": "Future",
+                        "score": 55
+                    },
+                    {
+                        "key": "collaboration_leadership",
+                        "label": "Collaboration and leadership",
+                        "weight": 10,
+                        "layer": "Professional",
+                        "score": 55
+                    },
+                    {
+                        "key": "career_readiness",
+                        "label": "Career readiness",
+                        "weight": 10,
+                        "layer": "Professional",
+                        "score": 55
+                    },
+                    {
+                        "key": "portfolio_evidence",
+                        "label": "Portfolio/project evidence",
+                        "weight": 10,
+                        "layer": "Technical / Domain",
+                        "score": 85
+                    }
+                ],
+                "layers": [
+                    {
+                        "layer": "Personal",
+                        "score": 55
+                    },
+                    {
+                        "layer": "Professional",
+                        "score": 55
+                    },
+                    {
+                        "layer": "Future",
+                        "score": 55
+                    },
+                    {
+                        "layer": "Technical / Domain",
+                        "score": 70
+                    }
+                ]
+            },
+            "strengths": [
+                {
+                    "dimension": "Portfolio/project evidence",
+                    "score": 85,
+                    "signal": "projects, artifacts"
+                }
+            ],
+            "gaps": [
+                {
+                    "dimension": "Purpose clarity",
+                    "score": 55,
+                    "gap_type": "Awareness gap",
+                    "symptoms": "Learner does not know career options",
+                    "root_cause": "Limited exposure",
+                    "recommended_fix": "Career discovery, alumni sessions, role maps",
+                    "severity": "medium",
+                    "priority": 45,
+                    "practice_task": "Compare three target roles and write a one-page role reality map.",
+                    "evidence_required": "role comparison map",
+                    "mentor_action": "Review the learner evidence and confirm the next action."
+                },
+                {
+                    "dimension": "Self-awareness and confidence",
+                    "score": 55,
+                    "gap_type": "Confidence gap",
+                    "symptoms": "Fear of interviews, meetings, or public speaking",
+                    "root_cause": "Low practice and feedback",
+                    "recommended_fix": "Speaking labs, mock interviews, mentoring",
+                    "severity": "medium",
+                    "priority": 45,
+                    "practice_task": "Record two mock interview answers and review them with a mentor.",
+                    "evidence_required": "mock interview recording",
+                    "mentor_action": "Schedule a low-pressure speaking review."
+                },
+                {
+                    "dimension": "Communication readiness",
+                    "score": 55,
+                    "gap_type": "Communication gap",
+                    "symptoms": "Weak emails, presentations, or workplace language",
+                    "root_cause": "No professional communication training",
+                    "recommended_fix": "Business communication course and writing drills",
+                    "severity": "medium",
+                    "priority": 45,
+                    "practice_task": "Write a business email and a STAR interview answer for review.",
+                    "evidence_required": "email sample and interview answer",
+                    "mentor_action": "Annotate one written answer and one spoken answer."
+                },
+                {
+                    "dimension": "Digital and AI readiness",
+                    "score": 55,
+                    "gap_type": "Digital gap",
+                    "symptoms": "Poor tool usage",
+                    "root_cause": "Limited access or practice",
+                    "recommended_fix": "Digital productivity and AI literacy training",
+                    "severity": "medium",
+                    "priority": 45,
+                    "practice_task": "Create a productivity workflow using spreadsheet, document, calendar, and AI tools.",
+                    "evidence_required": "digital productivity output",
+                    "mentor_action": "Review the learner evidence and confirm the next action."
+                },
+                {
+                    "dimension": "Domain/technical readiness",
+                    "score": 55,
+                    "gap_type": "Skill gap",
+                    "symptoms": "Cannot perform required role tasks",
+                    "root_cause": "Curriculum-practice mismatch",
+                    "recommended_fix": "Domain course, labs, projects",
+                    "severity": "medium",
+                    "priority": 45,
+                    "practice_task": "Complete a role-specific mini project or lab.",
+                    "evidence_required": "completed lab or domain project",
+                    "mentor_action": "Validate the selected mini project matches the target role."
+                }
+            ],
+            "development_plan": {
+                "day_30": [
+                    "Fix Awareness gap: Compare three target roles and write a one-page role reality map.",
+                    "Fix Confidence gap: Record two mock interview answers and review them with a mentor.",
+                    "Fix Communication gap: Write a business email and a STAR interview answer for review.",
+                    "Start one stream-specific learning item: programming fundamentals."
+                ],
+                "day_60": [
+                    "Submit two portfolio artifacts for AI and mentor review.",
+                    "Complete one proof-of-readiness item: GitHub portfolio.",
+                    "Repeat the written/spoken communication task and compare scores."
+                ],
+                "day_90": [
+                    "Complete a role simulation or real-world project brief.",
+                    "Finalize resume/profile, portfolio checklist, and mentor feedback.",
+                    "Begin adoption tracking with weekly reflection and evidence updates."
+                ]
+            },
+            "portfolio_checklist": [
+                {
+                    "item": "Dream pathway sheet",
+                    "status": "Required",
+                    "next_action": "Create or upload dream pathway sheet"
+                },
+                {
+                    "item": "Readiness scorecard",
+                    "status": "Required",
+                    "next_action": "Create or upload readiness scorecard"
+                },
+                {
+                    "item": "Resume",
+                    "status": "Required",
+                    "next_action": "Create or upload resume"
+                },
+                {
+                    "item": "LinkedIn/professional profile",
+                    "status": "Required",
+                    "next_action": "Create or upload linkedin/professional profile"
+                },
+                {
+                    "item": "Communication sample",
+                    "status": "Required",
+                    "next_action": "Create or upload communication sample"
+                },
+                {
+                    "item": "Digital productivity output",
+                    "status": "Required",
+                    "next_action": "Create or upload digital productivity output"
+                },
+                {
+                    "item": "Domain project",
+                    "status": "Required",
+                    "next_action": "Create or upload domain project"
+                },
+                {
+                    "item": "Reflection journal",
+                    "status": "Required",
+                    "next_action": "Create or upload reflection journal"
+                },
+                {
+                    "item": "Mentor feedback",
+                    "status": "Required",
+                    "next_action": "Create or upload mentor feedback"
+                },
+                {
+                    "item": "Final adoption score",
+                    "status": "Required",
+                    "next_action": "Create or upload final adoption score"
+                },
+                {
+                    "item": "6-month growth plan",
+                    "status": "Required",
+                    "next_action": "Create or upload 6-month growth plan"
+                }
+            ],
+            "mentor_summary": {
+                "review_focus": [
+                    "Review the learner evidence and confirm the next action.",
+                    "Schedule a low-pressure speaking review.",
+                    "Annotate one written answer and one spoken answer."
+                ],
+                "suggested_touchpoint": "Validate the top gaps, review evidence quality, and agree on the first 30-day milestone.",
+                "human_review_required_for": [
+                    "final certification",
+                    "placement readiness decisions",
+                    "sensitive emotional or mental-health signals",
+                    "disputed scores",
+                    "employer-facing recommendations"
+                ]
+            },
+            "institution_analytics": {
+                "cohort_signal": "Use this learner's dimension scores in department readiness heatmaps and recurring gap trends.",
+                "intervention_need": "Awareness gap",
+                "portfolio_completion_percent": 0
+            },
+            "adoption_index": {
+                "score": 31,
+                "components": {
+                    "skill_improvement": 55,
+                    "portfolio_evidence": 0,
+                    "mentor_teacher_rating": 0,
+                    "real_world_or_simulation_performance": 55,
+                    "reflection_and_self_awareness": 25,
+                    "consistency_and_discipline": 40,
+                    "next_level_growth_plan": 55
+                }
+            },
+            "source_documents": [
+                {
+                    "file": "Universal Readiness Flow Framework.docx",
+                    "extracted_markdown": "docs_extracted/Universal Readiness Flow Framework.md"
+                },
+                {
+                    "file": "Agentic Readiness Platform Build Blueprint.docx",
+                    "extracted_markdown": "docs_extracted/Agentic Readiness Platform Build Blueprint.md"
+                }
+            ]
+        }
+    },
+    {
+        "test": "Get Learner Profile",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "experience_level": "Fresher",
+            "id": 1,
+            "dream_statement": "My dream direction is target role.",
+            "strengths": null,
+            "target_roles": "target role",
+            "language": "English",
+            "user_id": 1,
+            "stream": "Engineering and Technology",
+            "location": "Global",
+            "purpose_statement": "I want this because the learner wants to build a meaningful future.",
+            "fears": null,
+            "country": "Global"
+        }
+    },
+    {
+        "test": "Get Learner Context",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "learner_id": 1,
+            "family_pressure": "Medium",
+            "confidence_baseline": 50,
+            "resilience_rating": 50,
+            "city_tier": "Tier 2",
+            "financial_dependency": "Yes",
+            "id": 1,
+            "stress_baseline": 50,
+            "income_tier": "Middle Class",
+            "college_tier": "Tier 2"
+        }
+    },
+    {
+        "test": "Get Readiness Proceedings",
+        "status_code": 200,
+        "result": "PASS",
+        "response": [
+            {
+                "id": 15,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 55,
+                    "CCQ": 45,
+                    "resilience_index": 60
+                },
+                "strategic_action": "Compare three target roles and write a one-page role reality map.",
+                "created_at": "2026-09-03T11:09:40"
+            },
+            {
+                "id": 14,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45,
+                    "resilience_index": 60
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T09:31:13"
+            },
+            {
+                "id": 13,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 55,
+                    "CCQ": 45,
+                    "resilience_index": 60
+                },
+                "strategic_action": "Compare three target roles and write a one-page role reality map.",
+                "created_at": "2026-09-03T09:23:05"
+            },
+            {
+                "id": 12,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 55,
+                    "CCQ": 45
+                },
+                "strategic_action": "Compare three target roles and write a one-page role reality map.",
+                "created_at": "2026-09-03T09:20:03"
+            },
+            {
+                "id": 11,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T09:14:44"
+            },
+            {
+                "id": 10,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 59,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T09:03:24"
+            },
+            {
+                "id": 9,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 55,
+                    "CCQ": 45
+                },
+                "strategic_action": "Compare three target roles and write a one-page role reality map.",
+                "created_at": "2026-09-03T08:56:36"
+            },
+            {
+                "id": 8,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 59,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T08:50:21"
+            },
+            {
+                "id": 7,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T08:19:46"
+            },
+            {
+                "id": 6,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T08:19:23"
+            },
+            {
+                "id": 5,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T08:18:08"
+            },
+            {
+                "id": 4,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T08:13:25"
+            },
+            {
+                "id": 3,
+                "flow_stage": "Diagnose",
+                "description": "Completed comprehensive diagnostic assessment.",
+                "metrics_snapshot": {
+                    "total_score": 58,
+                    "CARI": 56,
+                    "CCQ": 45
+                },
+                "strategic_action": "Solve a realistic case or simulation and submit the artifact.",
+                "created_at": "2026-09-03T08:11:08"
+            },
+            {
+                "id": 2,
+                "flow_stage": "Design",
+                "description": "Generated active Learning Plan from diagnostics.",
+                "metrics_snapshot": {},
+                "strategic_action": "Follow the weekly plan items to improve readiness.",
+                "created_at": "2026-09-03T08:11:08"
+            },
+            {
+                "id": 1,
+                "flow_stage": "Grow",
+                "description": "Added verified credential: Azure Cloud",
+                "metrics_snapshot": {},
+                "strategic_action": "Continue acquiring verified credentials.",
+                "created_at": "2026-09-03T06:20:52"
+            }
+        ]
+    },
+    {
+        "test": "Career Shift Paths",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Add Skill",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "id": 5,
+            "name": "Python",
+            "category": "Technical",
+            "proficiency": "Intermediate",
+            "verification_status": "Self-Reported"
+        }
+    },
+    {
+        "test": "Add Second Skill",
+        "status_code": 429,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Too many repeated API requests. Please slow down.\"}"
+    },
+    {
+        "test": "Get Skills",
+        "status_code": 200,
+        "result": "PASS",
+        "response": [
+            {
+                "id": 5,
+                "name": "Python",
+                "category": "Technical",
+                "proficiency": "Intermediate",
+                "verification_status": "Self-Reported"
+            },
+            {
+                "id": 4,
+                "name": "exxcel",
+                "category": "Technical",
+                "proficiency": "Intermediate",
+                "verification_status": "Self-Reported"
+            },
+            {
+                "id": 3,
+                "name": "SQL DB design",
+                "category": "Technical",
+                "proficiency": "Intermediate",
+                "verification_status": "Self-Reported"
+            },
+            {
+                "id": 1,
+                "name": "Python Coding",
+                "category": "Technical",
+                "proficiency": "Intermediate",
+                "verification_status": "Self-Reported"
+            }
+        ]
+    },
+    {
+        "test": "Get Courses",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Start Module",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Submit Quiz",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Generate Questions",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Get Jobs",
+        "status_code": 200,
+        "result": "PASS",
+        "response": [
+            {
+                "id": 1,
+                "title": "Junior Python Engineer",
+                "organization": "Asperion Technologies",
+                "type": "Corporate",
+                "required_skills": [
+                    "Python",
+                    "SQL",
+                    "Git"
+                ],
+                "matched_skills": [
+                    "Python",
+                    "SQL"
+                ],
+                "missing_skills": [
+                    "Git"
+                ],
+                "url": "https://asperion.org/careers/python-dev",
+                "match_score": 67
+            },
+            {
+                "id": 2,
+                "title": "National Informatics Center Web Assistant",
+                "organization": "Government of India",
+                "type": "Government",
+                "required_skills": [
+                    "PHP",
+                    "HTML",
+                    "databases"
+                ],
+                "matched_skills": [],
+                "missing_skills": [
+                    "PHP",
+                    "HTML",
+                    "databases"
+                ],
+                "url": "https://nic.in/careers",
+                "match_score": 0
+            },
+            {
+                "id": 3,
+                "title": "System Analyst Intern",
+                "organization": "Local Business Group",
+                "type": "Local",
+                "required_skills": [
+                    "Excel",
+                    "Communication"
+                ],
+                "matched_skills": [],
+                "missing_skills": [
+                    "Excel",
+                    "Communication"
+                ],
+                "url": "https://localbusiness.org/interns",
+                "match_score": 0
+            }
+        ]
+    },
+    {
+        "test": "Apply Job",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "status": "success",
+            "message": "Applied successfully"
+        }
+    },
+    {
+        "test": "Get Framework Map",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Persona Switch - Mentor",
+        "status_code": 429,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Too many repeated API requests. Please slow down.\"}"
+    },
+    {
+        "test": "Get Mentor Roster",
+        "status_code": 200,
+        "result": "PASS",
+        "response": [
+            {
+                "learner_id": 1,
+                "learner_name": "fresha_aspirant",
+                "stream": "Engineering and Technology",
+                "target_role": "target role",
+                "cari": 55,
+                "readiness_level": "Emerging",
+                "top_gap": "Awareness gap"
+            },
+            {
+                "learner_id": 2,
+                "learner_name": "test_learner",
+                "stream": null,
+                "target_role": null,
+                "cari": null,
+                "readiness_level": null,
+                "top_gap": null
+            },
+            {
+                "learner_id": 3,
+                "learner_name": "Sandeep Kanna Suresh",
+                "stream": null,
+                "target_role": null,
+                "cari": null,
+                "readiness_level": null,
+                "top_gap": null
+            }
+        ]
+    },
+    {
+        "test": "Get Learner Diagnostics",
+        "status_code": 200,
+        "result": "PASS",
+        "response": {
+            "learner_id": 1,
+            "learner_name": "fresha_aspirant",
+            "stream": "Engineering and Technology",
+            "target_roles": "target role",
+            "cari": 55,
+            "readiness_level": "Emerging",
+            "scorecard": {
+                "CARI": 55,
+                "readiness_level": "Emerging",
+                "purpose_clarity": 55,
+                "communication_readiness": 55,
+                "domain_readiness": 55,
+                "problem_solving": 55
+            },
+            "gaps": [
+                {
+                    "gap_type": "Awareness gap",
+                    "severity": "medium",
+                    "symptoms": "Learner does not know career options"
+                },
+                {
+                    "gap_type": "Confidence gap",
+                    "severity": "medium",
+                    "symptoms": "Fear of interviews, meetings, or public speaking"
+                },
+                {
+                    "gap_type": "Communication gap",
+                    "severity": "medium",
+                    "symptoms": "Weak emails, presentations, or workplace language"
+                },
+                {
+                    "gap_type": "Digital gap",
+                    "severity": "medium",
+                    "symptoms": "Poor tool usage"
+                },
+                {
+                    "gap_type": "Skill gap",
+                    "severity": "medium",
+                    "symptoms": "Cannot perform required role tasks"
+                }
+            ],
+            "skills": [
+                {
+                    "skill_name": "Python Coding",
+                    "proficiency_level": "Intermediate"
+                },
+                {
+                    "skill_name": "SQL DB design",
+                    "proficiency_level": "Intermediate"
+                },
+                {
+                    "skill_name": "exxcel",
+                    "proficiency_level": "Intermediate"
+                },
+                {
+                    "skill_name": "Python",
+                    "proficiency_level": "Intermediate"
+                }
+            ]
+        }
+    },
+    {
+        "test": "Get HITL Tasks",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Book Mentorship",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Persona Switch - Institution",
+        "status_code": 429,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Too many repeated API requests. Please slow down.\"}"
+    },
+    {
+        "test": "Get Institution Board",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    },
+    {
+        "test": "Persona Switch - Employer",
+        "status_code": 429,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Too many repeated API requests. Please slow down.\"}"
+    },
+    {
+        "test": "Get Employer Board",
+        "status_code": 404,
+        "result": "FAIL",
+        "response": "{\"detail\":\"Not Found\"}"
+    }
+]

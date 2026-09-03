@@ -794,15 +794,15 @@
         <div class="grid grid-3 gap margin-bottom">
           <div class="metric-card">
             <span class="metric-label">Employment Readiness Rate (ERR)</span>
-            <strong class="metric-value text-green">74.2%</strong>
+            <strong class="metric-value text-green" id="inst-err-val">Loading...</strong>
           </div>
           <div class="metric-card">
             <span class="metric-label">Cohort Skill Convergence (CSC)</span>
-            <strong class="metric-value text-blue">&sigma; = 8.4</strong>
+            <strong class="metric-value text-blue" id="inst-csc-val">Loading...</strong>
           </div>
           <div class="metric-card">
             <span class="metric-label">Skilling Partner ROI (SROI)</span>
-            <strong class="metric-value text-purple">88.5%</strong>
+            <strong class="metric-value text-purple" id="inst-sroi-val">Loading...</strong>
           </div>
         </div>
 
@@ -821,11 +821,8 @@
           <div class="card glass shadow">
             <h3 class="card-title">Cohort Competency Gap Heatmap</h3>
             <p class="muted margin-bottom">Visual density indicating stream-level capability deficits.</p>
-            <div class="heatmap-panel flex-column gap">
-              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Purpose Clarity:</span><span class="pill-indicator pill-green">92% Pass</span></div>
-              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Communication Readiness:</span><span class="pill-indicator pill-orange">58% Deficit</span></div>
-              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Domain Technical Readiness:</span><span class="pill-indicator pill-red">65% Severe Deficit</span></div>
-              <div class="row between py-1 border-bottom"><span class="small-text font-bold">Portfolio Project Evidence:</span><span class="pill-indicator pill-orange">42% Deficit</span></div>
+            <div class="heatmap-panel flex-column gap" id="inst-heatmap">
+              <!-- Dynamically populated heatmap -->
             </div>
           </div>
         </div>

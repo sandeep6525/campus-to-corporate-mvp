@@ -757,6 +757,13 @@ def _score_portfolio(evidence: set[str], provided_score: int) -> int:
 def _scores_with_context(payload: dict[str, Any]) -> dict[str, int]:
     provided = payload.get("dimension_scores") or {}
     evidence = _normalize_evidence(payload.get("portfolio_evidence") or [])
+    context_factors = payload.get("context_factors") or {}
+    
+    # Retrieve slider values (defaulting to 50 if missing)
+    conf = int(context_factors.get("confidence_baseline", 50))
+    stress = int(context_factors.get("stress_baseline", 50))
+    res = int(context_factors.get("resilience_rating", 50))
+
     scores = {
         dimension["key"]: _clamp_score(provided.get(dimension["key"]), default=55)
         for dimension in READINESS_DIMENSIONS
@@ -768,6 +775,15 @@ def _scores_with_context(payload: dict[str, Any]) -> dict[str, int]:
         scores["self_awareness_confidence"] = max(scores["self_awareness_confidence"], 62)
     if payload.get("target_role"):
         scores["career_readiness"] = max(scores["career_readiness"], 58)
+        
+    # Dynamic Math Adjustments from Context Factors
+    conf_offset = int((conf - 50) * 0.2)
+    scores["purpose_clarity"] = _clamp_score(scores["purpose_clarity"] + conf_offset, default=scores["purpose_clarity"])
+    scores["self_awareness_confidence"] = _clamp_score(scores["self_awareness_confidence"] + conf_offset, default=scores["self_awareness_confidence"])
+    
+    comm_offset = int((res - 50) * 0.2 - (stress - 50) * 0.1)
+    scores["communication_readiness"] = _clamp_score(scores["communication_readiness"] + comm_offset, default=scores["communication_readiness"])
+
     scores["portfolio_evidence"] = _score_portfolio(evidence, scores["portfolio_evidence"])
     return scores
 

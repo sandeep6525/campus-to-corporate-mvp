@@ -226,6 +226,7 @@ class ReadinessDiagnosisRequest(BaseModel):
     reflection: str = Field(default="", max_length=1500)
     dimension_scores: Dict[str, int] = Field(default_factory=dict)
     portfolio_evidence: List[str] = Field(default_factory=list)
+    context_factors: Dict[str, Any] = Field(default_factory=dict)
 
 
 class ReportResponse(BaseModel):
@@ -384,3 +385,34 @@ class MentorDiagnosticSnapshotResponse(BaseModel):
     scorecard: Dict[str, Any] | None = None
     gaps: List[Dict[str, Any]] = []
     skills: List[Dict[str, Any]] = []
+
+
+class CompetencyGapResponse(BaseModel):
+    name: str
+    value: int
+    status: str
+
+
+class InstitutionLearnerResponse(BaseModel):
+    learner_id: int
+    learner_name: str
+    target_role: str | None = None
+    readiness_score: int | None = None
+    readiness_status: str | None = None
+
+
+class InstitutionAnalyticsResponse(BaseModel):
+    employment_readiness_rate: str
+    cohort_skill_convergence: str
+    skilling_partner_roi: str
+    competency_gaps: List[CompetencyGapResponse]
+    cohort_size: int
+    learners: List[InstitutionLearnerResponse]
+
+class EmployerMatchResponse(BaseModel):
+    learner_id: int
+    candidate_name: str
+    target_role: str
+    stream: str
+    armc_score: int
+    matched_skills: List[str]
