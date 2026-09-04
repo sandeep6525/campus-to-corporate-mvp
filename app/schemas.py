@@ -163,6 +163,7 @@ class StudentCertificationResponse(BaseModel):
     credential_id: str | None = None
     verification_status: str
     file_url: str | None = None
+    reviewer_notes: str | None = None
 
 
 class StudentLinkRequest(BaseModel):

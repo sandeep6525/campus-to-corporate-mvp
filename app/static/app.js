@@ -372,6 +372,7 @@ async function loadSkillsHubPayload() {
           <td>${c.issuer}</td>
           <td><code>${c.credential_id || '--'}</code></td>
           <td><span class="pill-indicator pill-green">${c.verification_status}</span></td>
+          <td>${c.reviewer_notes || '--'}</td>
           <td><a href="${c.file_url || '#'}" target="_blank" class="small-text text-blue">View Certificate</a></td>
         </tr>
       `).join("");
@@ -379,7 +380,7 @@ async function loadSkillsHubPayload() {
       // Update completeness score indicators
       document.getElementById("pcs-val").textContent = `${Math.min(100, certs.length * 25)}%`;
     } else {
-      certsTable.innerHTML = `<tr><td colspan="5" class="text-center muted">No certifications uploaded yet.</td></tr>`;
+      certsTable.innerHTML = `<tr><td colspan="6" class="text-center muted">No certifications uploaded yet.</td></tr>`;
     }
 
     // load links

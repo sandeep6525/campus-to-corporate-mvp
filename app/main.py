@@ -618,7 +618,31 @@ def delete_learner_skill(
 
 @app.get("/api/learner/certifications", response_model=List[StudentCertificationResponse])
 def get_learner_certifications(db: Session = Depends(get_db)):
-    return db.query(StudentCertification).filter(StudentCertification.learner_id == CURRENT_USER_ID).all()
+    certs = db.query(StudentCertification).filter(StudentCertification.learner_id == CURRENT_USER_ID).all()
+    results = []
+    for cert in certs:
+        cert_dict = {
+            "id": cert.id,
+            "title": cert.title,
+            "issuer": cert.issuer,
+            "issue_date": cert.issue_date,
+            "credential_id": cert.credential_id,
+            "verification_status": cert.verification_status,
+            "file_url": cert.file_url,
+            "reviewer_notes": "--"
+        }
+        hitl = db.query(HitlReviewQueue).filter(
+            HitlReviewQueue.reference_id == cert.id,
+            HitlReviewQueue.task_type == "Certification Review"
+        ).order_by(HitlReviewQueue.id.desc()).first()
+        
+        if hitl and hitl.reviewer_notes:
+            cert_dict["reviewer_notes"] = hitl.reviewer_notes
+        elif cert.verification_status == "Pending Review":
+            cert_dict["reviewer_notes"] = "Pending mentor review"
+            
+        results.append(cert_dict)
+    return results
 
 
 @app.post("/api/learner/certifications", response_model=StudentCertificationResponse)
