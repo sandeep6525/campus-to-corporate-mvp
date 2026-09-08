@@ -366,6 +366,17 @@ class ReadinessProceedingResponse(BaseModel):
     created_at: Any
 
 
+class MentorAssignmentRequest(BaseModel):
+    learner_id: int
+    mentor_id: int
+
+class AssignedLearnerResponse(BaseModel):
+    learner_id: int
+    learner_name: str
+    stream: str | None = None
+    target_role: str | None = None
+    readiness_level: str | None = None
+
 class MentorRosterItemResponse(BaseModel):
     learner_id: int
     learner_name: str
@@ -410,6 +421,9 @@ class InstitutionAnalyticsResponse(BaseModel):
     cohort_size: int
     learners: List[InstitutionLearnerResponse]
 
+class InstitutionLearnerLinkRequest(BaseModel):
+    learner_id: int
+
 class EmployerMatchResponse(BaseModel):
     learner_id: int
     candidate_name: str
@@ -417,3 +431,43 @@ class EmployerMatchResponse(BaseModel):
     stream: str
     armc_score: int
     matched_skills: List[str]
+
+
+class PendingUserResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    username: str
+    email: str | None = None
+    role: str
+    personas: str
+    active_persona: str
+    status: str
+    onboarding_completed: bool
+    created_at: Any = None
+
+
+class AdminApprovalRequest(BaseModel):
+    notes: str | None = None
+
+
+class EntityStatusRequest(BaseModel):
+    status: str
+    notes: str | None = None
+
+
+class JobApplicationStatusRequest(BaseModel):
+    status: str
+    notes: str | None = None
+
+
+class AdminAuditLogResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    admin_id: int
+    action: str
+    target_entity: str
+    target_id: int
+    prev_status: str | None = None
+    new_status: str | None = None
+    notes: str | None = None
+    created_at: Any = None

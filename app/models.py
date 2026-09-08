@@ -4,13 +4,60 @@ from .db import Base
 from .encryption import EncryptedString
 
 
+
+
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String(120), unique=True, index=True)
-    role: Mapped[str] = mapped_column(String(40), default="Learner")  # Learner, Mentor, Institution, Employer
+    email: Mapped[str] = mapped_column(String(120), nullable=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(40), default="ACTIVE")
+    personas: Mapped[str] = mapped_column(String(255), default="Learner")
+    mfa_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    mfa_secret: Mapped[str] = mapped_column(String(255), nullable=True)
+    onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
+    active_persona: Mapped[str] = mapped_column(String(40), default="Learner")
+    
+    # Keeping old role column for backwards compatibility during migration, but it is deprecated
+    role: Mapped[str] = mapped_column(String(40), default="Learner")  # Deprecated
+    
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class MentorProfile(Base):
+    __tablename__ = "mentor_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    professional_role: Mapped[str] = mapped_column(String(120), nullable=True)
+    expertise: Mapped[str] = mapped_column(String(255), nullable=True)
+    organization: Mapped[str] = mapped_column(String(120), nullable=True)
+    availability: Mapped[str] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class InstitutionProfile(Base):
+    __tablename__ = "institution_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    institution_name: Mapped[str] = mapped_column(String(120), nullable=True)
+    organization_type: Mapped[str] = mapped_column(String(120), nullable=True)
+    contact_person: Mapped[str] = mapped_column(String(120), nullable=True)
+    location: Mapped[str] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class EmployerProfile(Base):
+    __tablename__ = "employer_profiles"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, index=True)
+    company_name: Mapped[str] = mapped_column(String(120), nullable=True)
+    industry: Mapped[str] = mapped_column(String(120), nullable=True)
+    representative: Mapped[str] = mapped_column(String(120), nullable=True)
+    website: Mapped[str] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
 
 
 class LearnerProfile(Base):
@@ -382,6 +429,15 @@ class MentorSession(Base):
     status: Mapped[str] = mapped_column(String(40), default="Scheduled")  # Scheduled, Completed, Cancelled
 
 
+class MentorAssignment(Base):
+    __tablename__ = "mentor_assignments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    learner_id: Mapped[int] = mapped_column(Integer, index=True)
+    mentor_id: Mapped[int] = mapped_column(Integer, index=True)
+    assigned_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Session(Base):
     __tablename__ = "sessions"
 
@@ -470,6 +526,29 @@ class JobApplication(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     learner_id: Mapped[int] = mapped_column(Integer, index=True)
     job_id: Mapped[int] = mapped_column(Integer, index=True)
-    status: Mapped[str] = mapped_column(String(40), default="Applied")
+    status: Mapped[str] = mapped_column(String(40), default="SUBMITTED") # SUBMITTED, SHORTLISTED, INTERVIEW, SELECTED, REJECTED
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    admin_id: Mapped[int] = mapped_column(Integer, index=True)
+    action: Mapped[str] = mapped_column(String(120))
+    target_entity: Mapped[str] = mapped_column(String(120))
+    target_id: Mapped[int] = mapped_column(Integer, index=True)
+    prev_status: Mapped[str] = mapped_column(String(120), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(120), nullable=True)
+    notes: Mapped[str] = mapped_column(Text, nullable=True)
+    created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class InstitutionLearnerLink(Base):
+    __tablename__ = "institution_learner_links"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    institution_id: Mapped[int] = mapped_column(Integer, index=True)
+    learner_id: Mapped[int] = mapped_column(Integer, index=True)
+    status: Mapped[str] = mapped_column(String(40), default="ACTIVE")
     created_at: Mapped[str] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

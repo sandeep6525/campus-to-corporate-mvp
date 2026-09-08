@@ -8,9 +8,155 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/styles.css" />
-</head>
+
+    <style>
+      .auth-container { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg-dark); }
+      .auth-card { background: var(--bg-card); padding: 2.5rem; border-radius: 16px; border: 1px solid var(--border-color); width: 100%; max-width: 420px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+      .auth-header { text-align: center; margin-bottom: 2rem; }
+      .auth-header h2 { margin-top: 1rem; color: var(--text-light); }
+      .auth-header p { color: var(--text-muted); font-size: 0.9rem; margin-top: 0.5rem; }
+      .input-group { margin-bottom: 1.2rem; }
+      .input-group label { display: block; margin-bottom: 0.5rem; font-size: 0.85rem; color: var(--text-muted); }
+      .input-group input, .input-group select { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid var(--border-color); background: var(--bg-darker); color: var(--text-light); }
+      .w-full { width: 100%; }
+      .auth-footer { text-align: center; margin-top: 1.5rem; font-size: 0.85rem; }
+      .auth-footer a { color: var(--primary-light); text-decoration: none; }
+      .hidden { display: none !important; }
+    </style>
+    </head>
 <body class="dark-mode">
-  <div class="app-layout">
+  
+  <div id="auth-layout" class="auth-container">
+    <div class="auth-card" id="login-view">
+      <div class="auth-header">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" style="width:40px; height:40px; color:var(--primary-light)"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+        <h2>Sign in to AspireOS</h2>
+        <p>Access your personalized Readiness ecosystem</p>
+      </div>
+      <form id="login-form">
+        <div class="input-group">
+          <label>Email Address</label>
+          <input type="email" id="login-email" required />
+        </div>
+        <div class="input-group">
+          <label>Password</label>
+          <input type="password" id="login-password" required />
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Sign In</button>
+      </form>
+      <div class="auth-footer">
+        <a href="#" id="show-register">Create an account</a> | <a href="#" id="show-forgot">Forgot password?</a>
+      </div>
+    </div>
+
+    <div class="auth-card hidden" id="register-view">
+      <div class="auth-header">
+        <h2>Join AspireOS</h2>
+        <p>Choose your persona to begin</p>
+      </div>
+      <form id="register-form">
+        <div class="input-group">
+          <label>Register As</label>
+          <select id="reg-role">
+            <option value="Learner">Learner</option>
+            <option value="Mentor">Mentor</option>
+            <option value="Institution">Institution</option>
+            <option value="Employer">Employer</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label>Email Address</label>
+          <input type="email" id="reg-email" required />
+        </div>
+        <div class="input-group">
+          <label>Password</label>
+          <input type="password" id="reg-password" required />
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Create Account</button>
+      </form>
+      <div class="auth-footer">
+        <a href="#" id="show-login">Already have an account? Sign in</a>
+      </div>
+    </div>
+    
+    <div class="auth-card hidden" id="mfa-view">
+      <div class="auth-header">
+        <h2>Two-Factor Authentication</h2>
+        <p>Enter the code from your authenticator app</p>
+      </div>
+      <form id="mfa-form">
+        <div class="input-group">
+          <label>Authentication Code</label>
+          <input type="text" id="mfa-code" required placeholder="123456" />
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Verify</button>
+      </form>
+    </div>
+
+    <div class="auth-card hidden" id="persona-select-view">
+      <div class="auth-header">
+        <h2>Select Active Persona</h2>
+        <p>You have multiple roles. Choose one for this session.</p>
+      </div>
+      <form id="persona-select-form">
+        <div class="input-group">
+          <select id="persona-select-dropdown" required></select>
+        </div>
+        <button type="submit" class="btn btn-primary w-full">Continue</button>
+      </form>
+    </div>
+
+    <div class="auth-card hidden" id="pending-verification-view">
+      <div class="auth-header">
+        <h2>Account Pending Verification</h2>
+        <p>Your account is currently under review by administrators.</p>
+      </div>
+      <div style="text-align:center;">
+        <button onclick="document.getElementById('pending-logout').click()" class="btn btn-primary">Go Back</button>
+      </div>
+    </div>
+    
+    <div class="auth-card hidden" id="onboarding-view">
+      <div class="auth-header">
+        <h2 id="onboarding-title">Complete your Profile</h2>
+        <p>We need a few details before you access your board.</p>
+      </div>
+      
+      <form id="mentor-onboarding" class="hidden">
+        <div class="input-group"><label>Professional Role</label><input type="text" id="mentor-role" required /></div>
+        <div class="input-group"><label>Expertise</label><input type="text" id="mentor-expertise" required /></div>
+        <div class="input-group"><label>Organization</label><input type="text" id="mentor-org" required /></div>
+        <button type="submit" class="btn btn-primary w-full">Submit Application</button>
+      </form>
+      
+      <form id="institution-onboarding" class="hidden">
+        <div class="input-group"><label>Institution Name</label><input type="text" id="inst-name" required /></div>
+        <div class="input-group"><label>Contact Person</label><input type="text" id="inst-contact" required /></div>
+        <button type="submit" class="btn btn-primary w-full">Submit Application</button>
+      </form>
+      
+      <form id="employer-onboarding" class="hidden">
+        <div class="input-group"><label>Company Name</label><input type="text" id="emp-name" required /></div>
+        <div class="input-group"><label>Industry</label><input type="text" id="emp-industry" required /></div>
+        <button type="submit" class="btn btn-primary w-full">Submit Application</button>
+      </form>
+      
+      <div id="onboarding-learner" class="hidden">
+        <p>Ready to discover your career readiness?</p>
+        <button id="start-learner-diag" class="btn btn-primary w-full">Start Diagnostic</button>
+      </div>
+      
+      <div id="onboarding-pending" class="hidden">
+        <div class="status-alert status-pending">
+          <h3>Verification Pending</h3>
+          <p>Your account is awaiting approval by an administrator. Please check back later.</p>
+          <button id="pending-logout" class="btn w-full" style="margin-top:1rem;">Logout</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="app-layout" id="main-app-layout" style="display: none;">
     
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
@@ -24,13 +170,14 @@
         <span class="tagline">ReadyFlow AI</span>
       </div>
 
-      <div class="user-role-selector">
+      <div class="user-role-selector hidden">
         <label for="persona-switch">Active Persona</label>
         <select id="persona-switch">
           <option value="Learner">Learner Dashboard</option>
           <option value="Mentor">Mentor Console</option>
           <option value="Institution">Institution Board</option>
           <option value="Employer">Employer Portal</option>
+          <option value="Platform Administrator">Platform Administrator</option>
         </select>
       </div>
 
@@ -98,6 +245,7 @@
             <span class="avatar-letter">L</span>
             <span id="user-display-name">fresha_aspirant</span>
           </div>
+          <button id="btn-logout" class="btn btn-outline" style="margin-left: 10px; padding: 0.25rem 0.75rem; font-size: 0.85rem;">Logout</button>
         </div>
       </header>
 
@@ -685,6 +833,15 @@
           </div>
         </div>
 
+        <!-- Pending Accounts Verification Queue -->
+        <div class="card glass shadow margin-bottom">
+          <h3 class="card-title">Pending User Verification Queue</h3>
+          <p class="muted margin-bottom">Review and approve or reject requested Mentor, Institution, and Employer registrations.</p>
+          <div id="pending-users-list" class="flex-column gap" style="max-height: 300px; overflow-y: auto;">
+            <p class="muted">Loading pending accounts...</p>
+          </div>
+        </div>
+
         <div class="grid grid-2 gap">
           <!-- Cyber policy logs -->
           <div class="card glass shadow">
@@ -827,6 +984,39 @@
             </div>
           </div>
         </div>
+        <div class="grid grid-2 gap margin-top">
+          <!-- Link Learner Form -->
+          <div class="card glass shadow">
+            <h3 class="card-title">Associate Learner</h3>
+            <p class="muted margin-bottom">Add a learner to your institution's cohort by their Learner ID.</p>
+            <form id="link-learner-form" class="flex-column gap">
+              <input type="number" id="link-learner-id" class="text-input" placeholder="Enter Learner ID (e.g. 27)" required />
+              <button type="submit" class="primary-btn">Add to Cohort</button>
+            </form>
+            <div id="link-learner-msg" class="margin-top small-text"></div>
+          </div>
+
+          <!-- Cohort Learners Table -->
+          <div class="card glass shadow">
+            <h3 class="card-title">My Cohort Learners</h3>
+            <p class="muted margin-bottom">Learners currently associated with your institution.</p>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Learner ID</th>
+                    <th>Name</th>
+                    <th>Readiness Score</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="institution-cohort-learners-list">
+                  <tr><td colspan="4" class="text-center muted">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- Employer matches portal -->
@@ -838,6 +1028,218 @@
           <h3>Active Job Listings & Matches</h3>
           <div class="flex-column gap margin-top" id="employer-job-matches">
             <!-- Dynamically populated -->
+          </div>
+        </div>
+      </section>
+
+      <!-- PLATFORM ADMINISTRATOR WORKSPACE TABS -->
+      
+      <!-- 1. Administrator Overview Dashboard -->
+      <section class="workspace-tab" id="tab-admin-dashboard">
+        <h1 class="page-title">Platform Administrator Operations Console</h1>
+        <p class="muted margin-bottom">System governance, pending account verification, human-in-the-loop task review, cybersecurity audit, and AI monitoring.</p>
+        
+        <!-- Summary Metric Cards -->
+        <div class="grid grid-3 gap margin-bottom">
+          <div class="metric-card">
+            <span class="metric-label">Pending User Approvals</span>
+            <strong class="metric-value text-orange" id="admin-pending-count">--</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Pending HITL Tasks</span>
+            <strong class="metric-value text-blue" id="admin-hitl-count">--</strong>
+          </div>
+          <div class="metric-card">
+            <span class="metric-label">Threats & Security Logs</span>
+            <strong class="metric-value text-green" id="admin-security-count">--</strong>
+          </div>
+        </div>
+
+        <div class="grid grid-2 gap margin-bottom">
+          <!-- A. Pending User Verification Card -->
+          <div class="card glass shadow">
+            <div class="row between align-center margin-bottom">
+              <h3>A. Pending User Verification Queue</h3>
+              <button class="primary-btn small-text" onclick="loadActiveTab('admin-user-approvals')">View All</button>
+            </div>
+            <p class="muted margin-bottom">Review and approve or reject requested Mentor, Institution, and Employer registrations.</p>
+            <div id="admin-dash-pending-list" class="flex-column gap" style="max-height: 280px; overflow-y: auto;">
+              <p class="muted small-text">Loading pending accounts...</p>
+            </div>
+          </div>
+
+          <!-- B. HITL Review Queue Card -->
+          <div class="card glass shadow">
+            <div class="row between align-center margin-bottom">
+              <h3>B. HITL Evidence Review Queue</h3>
+              <button class="primary-btn small-text" onclick="loadActiveTab('admin-hitl-queue')">View Queue</button>
+            </div>
+            <p class="muted margin-bottom">High-stakes student certification files and score adjustments requiring administrator manual review.</p>
+            <div id="admin-dash-hitl-list" class="flex-column gap" style="max-height: 280px; overflow-y: auto;">
+              <p class="muted small-text">Loading HITL review tasks...</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-2 gap margin-bottom">
+          <!-- C. Security Audit Summary Card -->
+          <div class="card glass shadow">
+            <div class="row between align-center margin-bottom">
+              <h3>C. Security & Policy Audit</h3>
+              <button class="primary-btn small-text" onclick="loadActiveTab('admin-security-policy')">Security Policy</button>
+            </div>
+            <div class="security-table-wrapper" style="max-height: 220px; overflow-y: auto;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>IP Address</th>
+                    <th>Category</th>
+                    <th>Action</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-dash-security-tbody">
+                  <tr><td colspan="4" class="text-center muted">Loading security logs...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- D & E. RAG/CAG & Knowledge Graph Status Card -->
+          <div class="card glass shadow">
+            <div class="row between align-center margin-bottom">
+              <h3>D & E. RAG/CAG & Knowledge Graph</h3>
+              <button class="primary-btn small-text" onclick="loadActiveTab('admin-rag-cag')">Monitor</button>
+            </div>
+            <div class="flex-column gap" id="admin-dash-rag-pane">
+              <p class="muted small-text">Loading RAG/CAG metrics...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Admin User Approvals Tab -->
+      <section class="workspace-tab" id="tab-admin-user-approvals">
+        <h1 class="page-title">User Approvals Verification</h1>
+        <p class="muted margin-bottom">Manage requested Mentor, Institution, and Employer registrations awaiting administrator authorization.</p>
+        <div class="card glass shadow">
+          <h3>Pending Registration Queue</h3>
+          <div id="admin-user-approvals-list" class="flex-column gap margin-top" style="max-height: 500px; overflow-y: auto;">
+            <p class="muted small-text">Loading pending user list...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Admin Mentor Management Tab -->
+      <section class="workspace-tab" id="tab-admin-mentor-mgmt">
+        <h1 class="page-title">Mentor Console & Roster Management</h1>
+        <p class="muted margin-bottom">Review verified mentors, assigned learner cohorts, and diagnostic scorecards.</p>
+        <div class="card glass shadow margin-bottom">
+          <div class="row between align-center margin-bottom">
+            <h3>Assign Learner to Mentor</h3>
+          </div>
+          <div class="row gap margin-bottom">
+            <input type="number" id="assign-learner-id" placeholder="Learner ID" class="input-field" style="width: 150px;">
+            <input type="number" id="assign-mentor-id" placeholder="Mentor ID" class="input-field" style="width: 150px;">
+            <button class="primary-btn" onclick="adminAssignMentor()">Assign</button>
+          </div>
+        </div>
+        <div class="card glass shadow margin-bottom">
+          <h3>Cohort Diagnostics Roster</h3>
+          <div class="flex-column gap margin-top" id="admin-mentor-mgmt-roster">
+            <p class="muted small-text">Loading mentor roster...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. Admin Institution Management Tab -->
+      <section class="workspace-tab" id="tab-admin-inst-mgmt">
+        <h1 class="page-title">Institution Management & Analytics</h1>
+        <p class="muted margin-bottom">Review employment readiness rates, cohort skill convergence, and institutional metrics.</p>
+        <div class="card glass shadow">
+          <h3>Institutional Performance Analytics</h3>
+          <div id="admin-inst-mgmt-pane" class="margin-top">
+            <p class="muted small-text">Loading institution board analytics...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. Admin Employer Management Tab -->
+      <section class="workspace-tab" id="tab-admin-emp-mgmt">
+        <h1 class="page-title">Employer Placement Portal</h1>
+        <p class="muted margin-bottom">Review corporate job matches and candidate placement metrics.</p>
+        <div class="card glass shadow">
+          <h3>Employer Candidate Matchmaker</h3>
+          <div id="admin-emp-mgmt-matches" class="flex-column gap margin-top">
+            <p class="muted small-text">Loading placement matches...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. Admin HITL Review Queue Tab -->
+      <section class="workspace-tab" id="tab-admin-hitl-queue">
+        <h1 class="page-title">Human-in-the-Loop Review Queue</h1>
+        <p class="muted margin-bottom">Audit student portfolio evidence, disputed scores, and manual credential verifications.</p>
+        <div class="card glass shadow">
+          <h3>Pending Verification Tasks</h3>
+          <div id="admin-hitl-queue-list" class="flex-column gap margin-top">
+            <p class="muted small-text">Loading HITL queue...</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. Admin Security & Policy Tab -->
+      <section class="workspace-tab" id="tab-admin-security-policy">
+        <h1 class="page-title">Security & Policy Center</h1>
+        <p class="muted margin-bottom">Audit global transport security, rate limiting logs, and strategic moat data policies.</p>
+        <div class="card glass shadow margin-bottom">
+          <h3>System Audit Logs</h3>
+          <div class="security-table-wrapper" style="max-height: 400px; overflow-y: auto;">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>IP Address</th>
+                  <th>Category</th>
+                  <th>Action Attempted</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="admin-security-policy-tbody">
+                <tr><td colspan="4" class="text-center muted">Loading security logs...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. Admin RAG/CAG Monitoring Tab -->
+      <section class="workspace-tab" id="tab-admin-rag-cag">
+        <h1 class="page-title">RAG / CAG Monitoring & Knowledge Graph</h1>
+        <p class="muted margin-bottom">Monitor pre-cached vector contexts, retrieval latency, and Knowledge Graph nodes.</p>
+        <div class="grid grid-2 gap margin-bottom">
+          <div class="card glass shadow">
+            <h3>RAG / CAG Index Monitor</h3>
+            <div id="admin-rag-cag-pane" class="flex-column gap margin-top">
+              <p class="muted small-text">Loading RAG/CAG status...</p>
+            </div>
+          </div>
+          <div class="card glass shadow">
+            <h3>Knowledge Graph Nodes & Edges</h3>
+            <div id="admin-kg-pane" class="flex-column gap margin-top">
+              <p class="muted small-text">Loading Knowledge Graph...</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9. Admin System Analytics Tab -->
+      <section class="workspace-tab" id="tab-admin-analytics">
+        <h1 class="page-title">System Analytics & Strategic Moats</h1>
+        <p class="muted margin-bottom">Track platform core metrics, partner integrations, and model performance benchmarks.</p>
+        <div class="card glass shadow">
+          <h3>Platform Moat Metrics</h3>
+          <div id="admin-analytics-moat-pane" class="grid grid-3 gap margin-top">
+            <p class="muted small-text">Loading moat metrics...</p>
           </div>
         </div>
       </section>

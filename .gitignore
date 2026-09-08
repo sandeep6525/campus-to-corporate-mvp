@@ -1,37 +1,45 @@
-# Python
 .venv/
-venv/
 __pycache__/
 *.py[cod]
-*.pyo
-*.pyd
 
-# Environment / secrets
 .env
+.env.*
+!.env.example
 
-# Local database and application data
-data/
+data/*.db
 *.db
-*.sqlite
-*.sqlite3
 
-# Uploaded files
-uploads/
+*.log
 
-# IDE
 .vscode/
 .idea/
 
-# OS
 .DS_Store
 Thumbs.db
 
-# Logs
-*.log
-
-# Temporary files
-*.tmp
-*.temp
-
-# Local binaries
+# Temporary audit/debug files
+audit_results.json
+audit_script.py
+check_db.py
+check_db2.py
+db_migration.py
+debug_api.py
+dummy.jpg
+fix_app.py
+fix_imports.py
+fix_js.py
+fix_learner_api.py
+fix_passwords.py
+frontend_patch.py
+get_traceback.py
+onboarding_api.py
+patch_fetch.py
+prep_user.py
+refactor.py
+refactor2.py
+scratch_funcs.json
+unlock.py
+verify_isolation.py
+# Local data and generated files
+data/
 rustup-init.exe

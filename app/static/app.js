@@ -1,3 +1,17 @@
+
+// Global fetch override to ensure credentials are included
+const originalFetch = window.fetch;
+window.fetch = function() {
+    let [resource, config] = arguments;
+    if(config === undefined) {
+        config = {};
+    }
+    if (config.credentials === undefined) {
+        config.credentials = 'include';
+    }
+    return originalFetch(resource, config);
+};
+
 // AspireOS (ReadyFlow AI) Frontend Application Controller
 
 let currentUserId = 1;
@@ -19,19 +33,84 @@ async function initApp() {
   loadActiveTab("dashboard");
 }
 
+function getDefaultTabForRole(role) {
+  if (role === "Platform Administrator") return "admin-dashboard";
+  if (role === "Mentor") return "mentor-desk";
+  if (role === "Institution") return "institution-board";
+  if (role === "Employer") return "employer-board";
+  return "dashboard";
+}
+
+// Handle routing based on user state
+function routeUserBasedOnStatus(data) {
+    // Hide all auth views by default
+    document.querySelectorAll(".auth-card").forEach(el => el.classList.add("hidden"));
+    document.getElementById("main-app-layout").style.display = "none";
+    document.getElementById("auth-layout").classList.remove("hidden");
+
+    if (data.mfa_required) {
+        document.getElementById("mfa-view").classList.remove("hidden");
+        return;
+    }
+    
+    if (data.user) {
+        if (data.user.status === "PENDING_VERIFICATION") {
+            document.getElementById("pending-verification-view").classList.remove("hidden");
+            return;
+        }
+
+        if (data.user.personas && data.user.personas.length > 1 && !data.user.active_persona_selected) {
+            const dropdown = document.getElementById("persona-select-dropdown");
+            dropdown.innerHTML = "";
+            data.user.personas.forEach(p => {
+                const opt = document.createElement("option");
+                opt.value = p;
+                opt.textContent = p;
+                dropdown.appendChild(opt);
+            });
+            document.getElementById("persona-select-view").classList.remove("hidden");
+            return;
+        }
+
+        // All good, show app
+        document.getElementById("auth-layout").classList.add("hidden");
+        document.getElementById("main-app-layout").style.display = "";
+
+        if (data.user.onboarding_completed === false) {
+             document.getElementById("onboard-modal").classList.remove("hidden");
+        }
+        
+        const initialTab = getDefaultTabForRole(data.user.role || data.user.active_persona);
+        loadActiveTab(initialTab);
+    }
+}
+
 // Get logged role switcher details
-async function fetchCurrentUser() {
+async function fetchCurrentUser(skipRouting = false) {
   try {
     const res = await fetch("/api/auth/current");
+    if (!res.ok) {
+        throw new Error("Not logged in");
+    }
     const data = await res.json();
-    currentUserId = data.user_id;
+    currentUserId = data.id;
     currentUserRole = data.role;
     document.getElementById("user-display-name").textContent = data.username;
 
     const roleSelect = document.getElementById("persona-switch");
-    roleSelect.value = currentUserRole;
+    if(roleSelect) roleSelect.value = currentUserRole;
+
+    if (!skipRouting) {
+        routeUserBasedOnStatus({ user: data, mfa_required: false });
+    }
   } catch (err) {
     console.error("Auth fetch failed:", err);
+    if (!skipRouting) {
+        document.querySelectorAll(".auth-card").forEach(el => el.classList.add("hidden"));
+        document.getElementById("login-view").classList.remove("hidden");
+        document.getElementById("auth-layout").classList.remove("hidden");
+        document.getElementById("main-app-layout").style.display = "none";
+    }
   }
 }
 
@@ -47,20 +126,145 @@ function setupEventListeners() {
     });
   });
 
+  // Login handler
+  const loginForm = document.getElementById("login-form");
+  if (loginForm) {
+    loginForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("login-email").value;
+      const password = document.getElementById("login-password").value;
+      try {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email, password })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.mfa_required && data.user && data.user.status !== "PENDING_VERIFICATION") {
+              await fetchCurrentUser(true);
+          }
+          routeUserBasedOnStatus(data);
+        } else {
+          alert("Incorrect email or password");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Login failed");
+      }
+    });
+  }
+  // Logout handler
+  const btnLogout = document.getElementById("btn-logout");
+  if (btnLogout) {
+    btnLogout.addEventListener("click", async () => {
+      try {
+        const res = await fetch("/api/auth/logout", { method: "POST" });
+        if (res.ok) {
+          // Clear frontend state and show login screen
+          currentUserId = null;
+          currentUserRole = null;
+          document.getElementById("main-app-layout").style.display = "none";
+          document.getElementById("auth-layout").classList.remove("hidden");
+          // Re-route to login view
+          document.querySelectorAll(".auth-card").forEach(el => el.classList.add("hidden"));
+          document.getElementById("login-view").classList.remove("hidden");
+          // Clear any dynamic data like sidebars or tabs (this happens implicitly when hidden, but can force clean)
+          document.getElementById("login-email").value = "";
+          document.getElementById("login-password").value = "";
+        } else {
+          alert("Logout failed. Please try again.");
+        }
+      } catch (err) {
+        console.error("Logout error", err);
+        alert("Logout failed. Please try again.");
+      }
+    });
+  }
+
+  // MFA handler
+  const mfaForm = document.getElementById("mfa-form");
+  if (mfaForm) {
+      mfaForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const code = document.getElementById("mfa-code").value;
+          try {
+              const res = await fetch("/api/auth/mfa-verify", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ code })
+              });
+              if (res.ok) {
+                  // After MFA, just fetch current user to route properly
+                  await fetchCurrentUser();
+              } else {
+                  alert("Invalid MFA code");
+              }
+          } catch (err) {
+              console.error(err);
+          }
+      });
+  }
+
+  // Persona Selection handler
+  const personaForm = document.getElementById("persona-select-form");
+  if (personaForm) {
+      personaForm.addEventListener("submit", async (e) => {
+          e.preventDefault();
+          const selectedPersona = document.getElementById("persona-select-dropdown").value;
+          try {
+              const res = await fetch(`/api/auth/role?role=${selectedPersona}`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" }
+              });
+              if (res.ok) {
+                  // Mark as selected so it doesn't loop
+                  await fetchCurrentUser();
+              } else {
+                  alert("Failed to set persona");
+              }
+          } catch (err) {
+              console.error(err);
+          }
+      });
+  }
+
+  // Logout handler
+  const pendingLogout = document.getElementById("pending-logout");
+  if (pendingLogout) {
+      pendingLogout.addEventListener("click", async () => {
+          try {
+              await fetch("/api/auth/logout", { method: "POST" });
+              currentUserId = null;
+              currentUserRole = null;
+              // Reset UI to login
+              document.querySelectorAll(".auth-card").forEach(el => el.classList.add("hidden"));
+              document.getElementById("login-view").classList.remove("hidden");
+              document.getElementById("auth-layout").classList.remove("hidden");
+              document.getElementById("main-app-layout").style.display = "none";
+          } catch (err) {
+              console.error("Logout failed:", err);
+          }
+      });
+  }
+
   // Persona switch controller
-  document.getElementById("persona-switch").addEventListener("change", async (e) => {
-    const newRole = e.target.value;
-    try {
-      const res = await fetch(`/api/auth/role?role=${newRole}`, { method: "POST" });
-      const data = await res.json();
-      currentUserRole = data.role;
-      // Reload current tab
-      const activeTab = document.querySelector(".nav-item.active").getAttribute("data-tab");
-      loadActiveTab(activeTab);
-    } catch (err) {
-      console.error("Role switch failed:", err);
-    }
-  });
+  const personaSwitch = document.getElementById("persona-switch");
+  if (personaSwitch) {
+    personaSwitch.addEventListener("change", async (e) => {
+      const newRole = e.target.value;
+      try {
+        const res = await fetch(`/api/auth/role?role=${encodeURIComponent(newRole)}`, { method: "POST" });
+        if (!res.ok) throw new Error("Failed to switch persona");
+        const data = await res.json();
+        currentUserRole = data.role;
+        loadActiveTab(getDefaultTabForRole(currentUserRole));
+      } catch (err) {
+        console.error("Role switch failed:", err);
+        alert(err.message);
+      }
+    });
+  }
 
   // Onboarding Modal bindings
   document.getElementById("trigger-onboard-modal").addEventListener("click", openOnboardModal);
@@ -103,10 +307,47 @@ function setupEventListeners() {
     document.getElementById("mock-report-workspace").classList.add("hidden");
     document.getElementById("mock-setup-workspace").classList.remove("hidden");
   });
+
+  // Institution Learner Link
+  const linkLearnerForm = document.getElementById("link-learner-form");
+  if (linkLearnerForm) {
+    linkLearnerForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const learnerId = document.getElementById("link-learner-id").value;
+      const msgEl = document.getElementById("link-learner-msg");
+      msgEl.innerText = "Associating...";
+      msgEl.className = "margin-top small-text text-blue";
+      try {
+        const res = await fetch("/api/institution/learners", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({ learner_id: parseInt(learnerId) })
+        });
+        const data = await res.json();
+        if (res.ok) {
+          msgEl.innerText = data.message;
+          msgEl.className = "margin-top small-text text-green";
+          document.getElementById("link-learner-id").value = "";
+          loadInstitutionBoardPayload();
+        } else {
+          msgEl.innerText = data.detail || "Error associating learner.";
+          msgEl.className = "margin-top small-text text-red";
+        }
+      } catch (err) {
+        msgEl.innerText = "Network error";
+        msgEl.className = "margin-top small-text text-red";
+      }
+    });
+  }
 }
 
 // Router tab switcher controller
 function loadActiveTab(tabName) {
+  // If Platform Administrator tries to access a learner tab, redirect to admin-dashboard
+  if (currentUserRole === "Platform Administrator" && !tabName.startsWith("admin-")) {
+    tabName = "admin-dashboard";
+  }
+
   const tabs = document.querySelectorAll(".workspace-tab");
   tabs.forEach(t => t.classList.remove("active"));
 
@@ -115,8 +356,35 @@ function loadActiveTab(tabName) {
     targetTab.classList.add("active");
   }
 
+  // Adjust sidebar menu item highlights
+  document.querySelectorAll(".nav-menu .nav-item").forEach(item => {
+    if (item.getAttribute("data-tab") === tabName) {
+      item.classList.add("active");
+    } else {
+      item.classList.remove("active");
+    }
+  });
+
   // Reload tab specific payloads
-  if (tabName === "dashboard") {
+  if (tabName === "admin-dashboard") {
+    loadAdminDashboardPayload();
+  } else if (tabName === "admin-user-approvals") {
+    loadAdminUserApprovalsPayload();
+  } else if (tabName === "admin-mentor-mgmt") {
+    loadAdminMentorMgmtPayload();
+  } else if (tabName === "admin-inst-mgmt") {
+    loadAdminInstMgmtPayload();
+  } else if (tabName === "admin-emp-mgmt") {
+    loadAdminEmpMgmtPayload();
+  } else if (tabName === "admin-hitl-queue") {
+    loadAdminHitlQueuePayload();
+  } else if (tabName === "admin-security-policy") {
+    loadAdminSecurityPolicyPayload();
+  } else if (tabName === "admin-rag-cag") {
+    loadAdminRagCagPayload();
+  } else if (tabName === "admin-analytics") {
+    loadAdminAnalyticsPayload();
+  } else if (tabName === "dashboard") {
     loadDashboardPayload();
   } else if (tabName === "skills-hub") {
     loadSkillsHubPayload();
@@ -146,55 +414,123 @@ function loadActiveTab(tabName) {
 
 function adjustRoleVisibilities() {
   const roleSelect = document.getElementById("persona-switch");
-  const role = roleSelect.value;
-
-  // Add/remove active menus
-  const mentorMenu = document.querySelector('.nav-item[data-tab="mentor-desk"]');
-  const instMenu = document.querySelector('.nav-item[data-tab="institution-board"]');
-  const emplMenu = document.querySelector('.nav-item[data-tab="employer-board"]');
-
-  // Remove existing mock menus to keep list clean
-  if (mentorMenu) mentorMenu.remove();
-  if (instMenu) instMenu.remove();
-  if (emplMenu) emplMenu.remove();
-
+  const role = roleSelect ? roleSelect.value : currentUserRole;
   const nav = document.querySelector(".nav-menu");
+  if (!nav) return;
 
-  if (role === "Mentor") {
-    nav.insertAdjacentHTML("beforeend", `
-      <button class="nav-item temp-menu" data-tab="mentor-desk">
+  const activeTabName = document.querySelector(".nav-item.active")?.getAttribute("data-tab");
+
+  if (role === "Platform Administrator") {
+    nav.innerHTML = `
+      <button class="nav-item ${activeTabName === 'admin-dashboard' || !activeTabName ? 'active' : ''}" data-tab="admin-dashboard">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        <span>Admin Dashboard</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'admin-user-approvals' ? 'active' : ''}" data-tab="admin-user-approvals">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-3 3-2-2"/></svg>
+        <span>User Approvals</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'admin-mentor-mgmt' ? 'active' : ''}" data-tab="admin-mentor-mgmt">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        <span>Mentor Console</span>
+        <span>Mentor Management</span>
       </button>
-    `);
-  } else if (role === "Institution") {
-    nav.insertAdjacentHTML("beforeend", `
-      <button class="nav-item temp-menu" data-tab="institution-board">
+      <button class="nav-item ${activeTabName === 'admin-inst-mgmt' ? 'active' : ''}" data-tab="admin-inst-mgmt">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg>
-        <span>Institution Board</span>
+        <span>Institution Management</span>
       </button>
-    `);
-  } else if (role === "Employer") {
-    nav.insertAdjacentHTML("beforeend", `
-      <button class="nav-item temp-menu" data-tab="employer-board">
+      <button class="nav-item ${activeTabName === 'admin-emp-mgmt' ? 'active' : ''}" data-tab="admin-emp-mgmt">
         <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
-        <span>Employer Board</span>
+        <span>Employer Management</span>
       </button>
-    `);
+      <button class="nav-item ${activeTabName === 'admin-hitl-queue' ? 'active' : ''}" data-tab="admin-hitl-queue">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        <span>HITL Review Queue</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'admin-security-policy' ? 'active' : ''}" data-tab="admin-security-policy">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Security & Policy</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'admin-rag-cag' ? 'active' : ''}" data-tab="admin-rag-cag">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+        <span>RAG/CAG Monitoring</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'admin-analytics' ? 'active' : ''}" data-tab="admin-analytics">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        <span>System Analytics</span>
+      </button>
+    `;
+  } else {
+    let personaExtraBtn = "";
+    if (role === "Mentor") {
+      personaExtraBtn = `
+        <button class="nav-item ${activeTabName === 'mentor-desk' ? 'active' : ''}" data-tab="mentor-desk">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span>Mentor Console</span>
+        </button>`;
+    } else if (role === "Institution") {
+      personaExtraBtn = `
+        <button class="nav-item ${activeTabName === 'institution-board' ? 'active' : ''}" data-tab="institution-board">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 2 3 6 3s6-1 6-3v-5"/></svg>
+          <span>Institution Board</span>
+        </button>`;
+    } else if (role === "Employer") {
+      personaExtraBtn = `
+        <button class="nav-item ${activeTabName === 'employer-board' ? 'active' : ''}" data-tab="employer-board">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          <span>Employer Board</span>
+        </button>`;
+    }
+
+    nav.innerHTML = `
+      <button class="nav-item ${activeTabName === 'dashboard' || !activeTabName ? 'active' : ''}" data-tab="dashboard">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        <span>Dashboard</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'skills-hub' ? 'active' : ''}" data-tab="skills-hub">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+        <span>Skills & Credentials</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'mock-interview' ? 'active' : ''}" data-tab="mock-interview">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span>Mock Interviews</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'lms-academy' ? 'active' : ''}" data-tab="lms-academy">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M4 19.5A2.5 2.5 0 0 0 6.5 22H20M4 15V3a2 2 0 0 1 2-2h14v16H6.5M4 19.5H6.5"/></svg>
+        <span>Asperion LMS</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'global-courses' ? 'active' : ''}" data-tab="global-courses">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/><path d="M2 12h20"/></svg>
+        <span>Global Courses</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'job-board' ? 'active' : ''}" data-tab="job-board">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        <span>Jobs & Openings</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'appointments' ? 'active' : ''}" data-tab="appointments">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <span>1-on-1 Mentorship</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'cyber-security' ? 'active' : ''}" data-tab="cyber-security">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        <span>Security & Policy</span>
+      </button>
+      <button class="nav-item ${activeTabName === 'framework-ref' ? 'active' : ''}" data-tab="framework-ref">
+        <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+        <span>Framework Map</span>
+      </button>
+      ${personaExtraBtn}
+    `;
   }
 
-  // Re-bind click event to new temporary items
-  const newItems = document.querySelectorAll(".temp-menu");
-  newItems.forEach(item => {
+  // Re-bind click events
+  const navItems = nav.querySelectorAll(".nav-item");
+  navItems.forEach(item => {
     item.addEventListener("click", () => {
-      document.querySelectorAll(".nav-item").forEach(n => n.classList.remove("active"));
+      navItems.forEach(n => n.classList.remove("active"));
       item.classList.add("active");
       const tabName = item.getAttribute("data-tab");
       loadActiveTab(tabName);
     });
-    if (item.getAttribute("data-tab") === document.querySelector(".nav-item.active")?.getAttribute("data-tab")) {
-      item.classList.add("active");
-    }
   });
 }
 
@@ -591,10 +927,31 @@ async function calculateCareerShift() {
         <ul class="small-text pl-3 text-muted">
           ${data.reremediation_delta ? data.reremediation_delta.map(r => `<li>${r}</li>`).join("") : data.remediation_delta.map(r => `<li>${r}</li>`).join("")}
         </ul>
+        <button class="primary-btn margin-top" onclick="confirmCareerShift('${targetRole}', '${reason}')">Confirm & Apply Career Shift</button>
       </div>
     `;
   } catch (err) {
     console.error(err);
+  }
+}
+
+async function confirmCareerShift(targetRole, reason) {
+  try {
+    const res = await fetch("/api/readiness/career-shift/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ target_role: targetRole, shift_reason: reason })
+    });
+    const data = await res.json();
+    if (data.status === "success") {
+      alert("Career Shift confirmed! Your Gap Report and Learning Plan have been updated.");
+      window.location.reload();
+    } else {
+      alert("Error confirming career shift.");
+    }
+  } catch (err) {
+    console.error(err);
+    alert("An error occurred.");
   }
 }
 
@@ -1568,10 +1925,79 @@ async function loadCyberSecurityPayload() {
       loopsContainer.innerHTML = `<p class="muted small-text">No loop interventions logged yet.</p>`;
     }
 
+    // load pending users queue
+    await loadPendingUsersPayload();
+
   } catch (err) {
     console.error(err);
   }
 }
+
+async function loadPendingUsersPayload() {
+  const container = document.getElementById("pending-users-list");
+  if (!container) return;
+  try {
+    const res = await fetch("/api/admin/users/pending");
+    if (!res.ok) {
+      container.innerHTML = `<p class="muted small-text">Admin authorization required.</p>`;
+      return;
+    }
+    const users = await res.json();
+    if (users && users.length > 0) {
+      container.innerHTML = users.map(u => `
+        <div class="card glass py-2 px-3 row between align-center margin-bottom-5" style="border-color: rgba(255, 170, 0, 0.3);">
+          <div>
+            <strong>${u.username || u.email}</strong> (${u.email})<br/>
+            <span class="small-text text-muted">Role: <strong>${u.role}</strong> | Personas: <strong>${u.personas}</strong></span><br/>
+            <span class="small-text text-orange">Status: <strong>${u.status}</strong></span>
+          </div>
+          <div class="row gap">
+            <button class="primary-btn small-text" onclick="approveUser(${u.id})">Approve</button>
+            <button class="primary-btn small-text" style="background: var(--accent-red);" onclick="rejectUser(${u.id})">Reject</button>
+          </div>
+        </div>
+      `).join("");
+    } else {
+      container.innerHTML = `<p class="muted small-text">No pending user verification requests.</p>`;
+    }
+  } catch (err) {
+    console.error("Error loading pending users:", err);
+    container.innerHTML = `<p class="muted small-text">Failed to load pending users.</p>`;
+  }
+}
+
+async function approveUser(userId) {
+  try {
+    const res = await fetch(`/api/admin/users/${userId}/approve`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({notes: "Approved from Dashboard"}) });
+    if (res.ok) {
+      alert("User approved successfully");
+      await loadPendingUsersPayload();
+    } else {
+      const data = await res.json();
+      alert("Approval failed: " + (data.detail || "Error"));
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Approval request error");
+  }
+}
+
+async function rejectUser(userId) {
+  try {
+    const res = await fetch(`/api/admin/users/${userId}/reject`, { method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({notes: "Rejected from Dashboard"}) });
+    if (res.ok) {
+      alert("User rejected successfully");
+      await loadPendingUsersPayload();
+    } else {
+      const data = await res.json();
+      alert("Rejection failed: " + (data.detail || "Error"));
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Rejection request error");
+  }
+}
+
 
 // --- TAB PAYLOAD 10: FRAMEWORK reference ---
 async function loadFrameworkPayload(subtab) {
@@ -1745,31 +2171,57 @@ async function resolveHitlTask(hitlId, decision) {
 
 async function loadMentorRosterPayload() {
   try {
-    const res = await fetch("/api/admin/roster", { cache: "no-store" });
+    const res = await fetch("/api/mentors/assigned-learners", { cache: "no-store" });
+    if (!res.ok) throw new Error("Failed to load assigned learners");
     const roster = await res.json();
     const container = document.getElementById("mentor-cohort-roster");
     
     if (roster && roster.length > 0) {
       container.innerHTML = roster.map(r => `
-        <div class="roster-item card glass py-2 px-3 row between align-center margin-bottom-5">
-          <div>
-            <strong>${r.learner_name}</strong><br/>
-            <span class="small-text muted">${r.target_role || r.stream || 'Target Not Set'}</span>
-          </div>
-          <div class="text-right">
-            <strong>CARI: ${r.cari !== null ? r.cari : 'Not assessed'}</strong><br/>
-            <span class="small-text ${r.top_gap ? 'text-orange' : 'text-green'}">Gap: ${r.top_gap || 'No major gap identified'}</span>
-          </div>
-          <div>
-            <button class="primary-btn small-text" onclick="openDiagnosticModal(${r.learner_id})">View Profile</button>
-          </div>
-        </div>
-      `).join("");
+            <div class="card glass py-2 px-3 row between align-center margin-bottom-5">
+              <div>
+                <strong>${r.learner_name}</strong> (ID: ${r.learner_id})<br/>
+                <span class="small-text muted">Target Role: ${r.target_role || 'N/A'} | Stream: ${r.stream || 'N/A'} | Readiness: ${r.readiness_level || 'N/A'}</span>
+              </div>
+              <div class="row gap">
+                <button class="primary-btn small-text" onclick="openDiagnosticModal(${r.learner_id})">View Diagnostics</button>
+              </div>
+            </div>
+          `).join("");
     } else {
       container.innerHTML = `<p class="muted">No learners available.</p>`;
     }
   } catch (err) {
     console.error("Failed to load roster", err);
+    document.getElementById("mentor-cohort-roster").innerHTML = `<p class="muted">Failed to load learners.</p>`;
+  }
+}
+
+async function adminAssignMentor() {
+  const learnerId = document.getElementById("assign-learner-id").value;
+  const mentorId = document.getElementById("assign-mentor-id").value;
+  if (!learnerId || !mentorId) {
+    alert("Please enter both Learner ID and Mentor ID");
+    return;
+  }
+  
+  try {
+    const res = await fetch("/api/admin/mentor-assignments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ learner_id: parseInt(learnerId), mentor_id: parseInt(mentorId) })
+    });
+    const data = await res.json();
+    if (res.ok) {
+      alert("Mentor assigned successfully!");
+      document.getElementById("assign-learner-id").value = "";
+      document.getElementById("assign-mentor-id").value = "";
+    } else {
+      alert("Assignment failed: " + (data.detail || data.message));
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Failed to assign mentor.");
   }
 }
 
@@ -1877,6 +2329,21 @@ async function loadInstitutionBoardPayload() {
         <div class="text-right"><strong>SROI: 74%</strong><br/><span class="small-text text-green">CSC: &sigma;=9.4</span></div>
       </div>
     `;
+
+    // Render My Cohort Learners
+    const learnersList = document.getElementById("institution-cohort-learners-list");
+    if (data.learners && data.learners.length > 0) {
+      learnersList.innerHTML = data.learners.map(l => `
+        <tr>
+          <td>${l.learner_id}</td>
+          <td><strong>${l.learner_name}</strong><br/><span class="small-text muted">${l.target_role || '--'}</span></td>
+          <td>${l.readiness_score || '--'} / 100</td>
+          <td><span class="pill-indicator ${l.readiness_status === 'Ready' ? 'pill-green' : 'pill-orange'}">${l.readiness_status || 'Pending'}</span></td>
+        </tr>
+      `).join("");
+    } else {
+      learnersList.innerHTML = `<tr><td colspan="4" class="text-center muted">No learners associated yet.</td></tr>`;
+    }
   } catch (err) {
     console.error(err);
     const errEl = document.getElementById("inst-err-val");
@@ -2075,3 +2542,335 @@ function stopMediaRecording() {
 String.prototype.strip = function () {
   return this.trim();
 };
+
+// --- ADMIN PAYLOAD LOADERS ---
+async function loadAdminDashboardPayload() {
+  try {
+    const resPending = await fetch("/api/admin/users/pending");
+    if (resPending.ok) {
+      const pendingUsers = await resPending.json();
+      document.getElementById("admin-pending-count").textContent = pendingUsers.length;
+      renderAdminPendingList("admin-dash-pending-list", pendingUsers);
+    } else {
+      document.getElementById("admin-pending-count").textContent = "0";
+      document.getElementById("admin-dash-pending-list").innerHTML = `<p class="muted small-text">Failed to load pending users.</p>`;
+    }
+
+    const resHitl = await fetch("/api/admin/hitl-queue");
+    if (resHitl.ok) {
+      const hitlItems = await resHitl.json();
+      document.getElementById("admin-hitl-count").textContent = hitlItems.length;
+      renderAdminHitlList("admin-dash-hitl-list", hitlItems);
+    } else {
+      document.getElementById("admin-hitl-count").textContent = "0";
+      document.getElementById("admin-dash-hitl-list").innerHTML = `<p class="muted small-text">Failed to load HITL queue.</p>`;
+    }
+
+    const resSecurity = await fetch("/api/admin/security-logs");
+    if (resSecurity.ok) {
+      const logs = await resSecurity.json();
+      document.getElementById("admin-security-count").textContent = logs.length;
+      renderAdminSecurityLogs("admin-dash-security-tbody", logs.slice(0, 5));
+    }
+
+    const resStatus = await fetch("/api/rag-cag/status");
+    const resKg = await fetch("/api/knowledge-graph");
+    if (resStatus.ok && resKg.ok) {
+      const status = await resStatus.json();
+      const kg = await resKg.json();
+      const pane = document.getElementById("admin-dash-rag-pane");
+      if (pane) {
+        pane.innerHTML = `
+          <div class="row between"><span class="small-text">RAG Search Corpus:</span><strong class="text-green">${status.vector_docs_count} Docs Indexed</strong></div>
+          <div class="row between"><span class="small-text">CAG Caching Status:</span><strong class="text-blue">${status.cag_cached_docs_count} Docs Cached</strong></div>
+          <div class="row between"><span class="small-text">Knowledge Graph Nodes:</span><strong class="text-orange">${kg.nodes ? kg.nodes.length : 0} Nodes</strong></div>
+          <div class="row between"><span class="small-text">Knowledge Graph Edges:</span><strong>${kg.edges ? kg.edges.length : 0} Edges</strong></div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error("Admin dashboard payload error:", err);
+  }
+}
+
+function renderAdminPendingList(elementId, users) {
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  if (users && users.length > 0) {
+    container.innerHTML = users.map(u => `
+      <div class="card glass py-2 px-3 row between align-center margin-bottom-5" style="border-color: rgba(255, 170, 0, 0.3);">
+        <div>
+          <strong>${u.username || u.email}</strong> (${u.email})<br/>
+          <span class="small-text text-muted">Role: <strong>${u.role}</strong> | Personas: <strong>${u.personas}</strong></span><br/>
+          <span class="small-text text-orange">Status: <strong>${u.status}</strong></span>
+        </div>
+        <div class="row gap">
+          <button class="primary-btn small-text" onclick="approveUser(${u.id})">Approve</button>
+          <button class="primary-btn small-text" style="background: var(--accent-red);" onclick="rejectUser(${u.id})">Reject</button>
+        </div>
+      </div>
+    `).join("");
+  } else {
+    container.innerHTML = `<p class="muted small-text">No pending user verification requests.</p>`;
+  }
+}
+
+function renderAdminHitlList(elementId, hitl) {
+  const container = document.getElementById(elementId);
+  if (!container) return;
+  if (hitl && hitl.length > 0) {
+    container.innerHTML = hitl.map(h => `
+      <div class="card glass py-2 px-3 row between align-center margin-bottom-5">
+        <div style="flex: 2;">
+          <strong>Student: ${h.learner_name || 'System'}</strong> | <span class="small-text text-orange">Task: ${h.task_type}</span>
+          <p class="small-text margin-top-5">
+            Certificate: ${h.certificate_title || h.flag_reason || 'N/A'}<br/>
+            Issuer: ${h.issuer || 'N/A'} | Credential ID: ${h.credential_id || 'N/A'}<br/>
+            ${h.file_url ? `<a href="${h.file_url}" target="_blank" class="text-blue">📄 View Evidence</a>` : ''}
+          </p>
+        </div>
+        <div style="flex: 1; text-align: right;">
+          <p class="small-text margin-bottom-5">Status: ${h.status}</p>
+          ${h.status === 'Pending' ? `
+            <button class="primary-btn small-text" onclick="resolveHitlTask(${h.id}, 'approve')">Approve</button>
+            <button class="primary-btn small-text" style="background: var(--accent-red);" onclick="resolveHitlTask(${h.id}, 'reject')">Reject</button>
+          ` : `<span class="pill-indicator pill-green">Resolved</span>`}
+        </div>
+      </div>
+    `).join("");
+  } else {
+    container.innerHTML = `<p class="muted small-text">No pending review tasks in queue.</p>`;
+  }
+}
+
+function renderAdminSecurityLogs(elementId, logs) {
+  const tbody = document.getElementById(elementId);
+  if (!tbody) return;
+  if (logs && logs.length > 0) {
+    tbody.innerHTML = logs.map(l => `
+      <tr>
+        <td><code>${l.ip_address}</code></td>
+        <td><strong>${l.category}</strong></td>
+        <td class="small-text text-muted">${l.action_attempt}</td>
+        <td><span class="pill-indicator ${l.status === 'Allowed' ? 'pill-green' : 'pill-red'}">${l.status}</span></td>
+      </tr>
+    `).join("");
+  } else {
+    tbody.innerHTML = `<tr><td colspan="4" class="text-center muted">No threats logged. System secure.</td></tr>`;
+  }
+}
+
+async function loadAdminUserApprovalsPayload() {
+  try {
+    const res = await fetch("/api/admin/users/pending");
+    if (res.ok) {
+      const users = await res.json();
+      renderAdminPendingList("admin-user-approvals-list", users);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadAdminMentorMgmtPayload() {
+  try {
+    const res = await fetch("/api/admin/mentors");
+    if (res.ok) {
+      const roster = await res.json();
+      const container = document.getElementById("admin-mentor-mgmt-roster");
+      if (container) {
+        if (roster && roster.length > 0) {
+          container.innerHTML = roster.map(r => `
+            <div class="card glass py-2 px-3 row between align-center margin-bottom-5">
+              <div>
+                <strong>${r.username}</strong> (${r.email})<br/>
+                <span class="small-text muted">Expertise: ${r.expertise || 'N/A'} | Organization: ${r.organization || 'N/A'}</span>
+              </div>
+              <div class="row gap">
+                <span class="badge ${r.status === 'ACTIVE' ? 'green' : 'orange'}">${r.status}</span>
+                ${r.status === 'ACTIVE' 
+                  ? `<button class="primary-btn small-text" style="background:var(--accent-red)" onclick="updateEntityStatus('mentors', ${r.id}, 'LOCKED')">Disable</button>`
+                  : `<button class="primary-btn small-text" onclick="updateEntityStatus('mentors', ${r.id}, 'ACTIVE')">Enable</button>`
+                }
+              </div>
+            </div>
+          `).join("");
+        } else {
+          container.innerHTML = `<p class="muted small-text">No mentors found.</p>`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+async function loadAdminInstMgmtPayload() {
+  try {
+    const res = await fetch("/api/admin/institutions");
+    if (res.ok) {
+      const data = await res.json();
+      const container = document.getElementById("admin-inst-mgmt-pane");
+      if (container) {
+        if (data && data.length > 0) {
+          container.innerHTML = data.map(r => `
+            <div class="card glass py-2 px-3 row between align-center margin-bottom-5">
+              <div>
+                <strong>${r.username}</strong> (${r.email})<br/>
+                <span class="small-text muted">Institution: ${r.institution_name || 'N/A'} | Location: ${r.location || 'N/A'}</span>
+              </div>
+              <div class="row gap">
+                <span class="badge ${r.status === 'ACTIVE' ? 'green' : 'orange'}">${r.status}</span>
+                ${r.status === 'ACTIVE' 
+                  ? `<button class="primary-btn small-text" style="background:var(--accent-red)" onclick="updateEntityStatus('institutions', ${r.id}, 'LOCKED')">Disable</button>`
+                  : `<button class="primary-btn small-text" onclick="updateEntityStatus('institutions', ${r.id}, 'ACTIVE')">Enable</button>`
+                }
+              </div>
+            </div>
+          `).join("");
+        } else {
+          container.innerHTML = `<p class="muted small-text">No institutions found.</p>`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+async function loadAdminEmpMgmtPayload() {
+  try {
+    const res = await fetch("/api/admin/employers");
+    if (res.ok) {
+      const data = await res.json();
+      const container = document.getElementById("admin-emp-mgmt-matches");
+      if (container) {
+        if (data && data.length > 0) {
+          container.innerHTML = data.map(r => `
+            <div class="card glass py-2 px-3 row between align-center margin-bottom-5">
+              <div>
+                <strong>${r.username}</strong> (${r.email})<br/>
+                <span class="small-text muted">Company: ${r.company_name || 'N/A'} | Industry: ${r.industry || 'N/A'}</span>
+              </div>
+              <div class="row gap">
+                <span class="badge ${r.status === 'ACTIVE' ? 'green' : 'orange'}">${r.status}</span>
+                ${r.status === 'ACTIVE' 
+                  ? `<button class="primary-btn small-text" style="background:var(--accent-red)" onclick="updateEntityStatus('employers', ${r.id}, 'LOCKED')">Disable</button>`
+                  : `<button class="primary-btn small-text" onclick="updateEntityStatus('employers', ${r.id}, 'ACTIVE')">Enable</button>`
+                }
+              </div>
+            </div>
+          `).join("");
+        } else {
+          container.innerHTML = `<p class="muted small-text">No employers found.</p>`;
+        }
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+async function loadAdminHitlQueuePayload() {
+  try {
+    const res = await fetch("/api/admin/hitl-queue");
+    if (res.ok) {
+      const hitl = await res.json();
+      renderAdminHitlList("admin-hitl-queue-list", hitl);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadAdminSecurityPolicyPayload() {
+  try {
+    const res = await fetch("/api/admin/security-logs");
+    if (res.ok) {
+      const logs = await res.json();
+      renderAdminSecurityLogs("admin-security-policy-tbody", logs);
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadAdminRagCagPayload() {
+  try {
+    const resStatus = await fetch("/api/rag-cag/status");
+    const resKg = await fetch("/api/knowledge-graph");
+
+    if (resStatus.ok) {
+      const status = await resStatus.json();
+      const pane = document.getElementById("admin-rag-cag-pane");
+      if (pane) {
+        pane.innerHTML = `
+          <div class="row between"><span class="small-text">RAG Search Corpus:</span><strong class="text-green">${status.vector_docs_count} Documents Indexed</strong></div>
+          <div class="row between"><span class="small-text">CAG Caching Status:</span><strong class="text-blue">${status.cag_cached_docs_count} Docs pre-cached</strong></div>
+          <div class="row between"><span class="small-text">CAG Latency:</span><strong>${status.latency_cag_ms}ms</strong></div>
+          <div class="row between"><span class="small-text">RAG Search Latency:</span><strong>${status.latency_rag_ms}ms</strong></div>
+        `;
+      }
+    }
+
+    if (resKg.ok) {
+      const kg = await resKg.json();
+      const kgPane = document.getElementById("admin-kg-pane");
+      if (kgPane) {
+        kgPane.innerHTML = `
+          <div class="row between"><span class="small-text">Total Knowledge Nodes:</span><strong class="text-green">${kg.nodes ? kg.nodes.length : 0}</strong></div>
+          <div class="row between"><span class="small-text">Total Directed Edges:</span><strong class="text-blue">${kg.edges ? kg.edges.length : 0}</strong></div>
+          <div class="margin-top pt-2 border-top">
+            <h5>Node Labels</h5>
+            <div class="row wrap gap margin-top-5">
+              ${kg.nodes ? kg.nodes.map(n => `<span class="badge muted">${n.type}: ${n.label}</span>`).join("") : ''}
+            </div>
+          </div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+async function loadAdminAnalyticsPayload() {
+  try {
+    const resMoat = await fetch("/api/admin/moat");
+    if (resMoat.ok) {
+      const moat = await resMoat.json();
+      const container = document.getElementById("admin-analytics-moat-pane");
+      if (container) {
+        container.innerHTML = Object.entries(moat).map(([k, v]) => `
+          <div class="card glass text-center py-3">
+            <span class="small-text uppercase text-blue">${k}</span>
+            <h2 class="margin-top-5 text-green">${v}</h2>
+          </div>
+        `).join("");
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
+
+
+async function updateEntityStatus(entityType, id, status) {
+  try {
+    const res = await fetch(`/api/admin/${entityType}/${id}/status`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: status, notes: "Status updated from Admin Dashboard" })
+    });
+    if (res.ok) {
+      alert(`${entityType} status updated to ${status}`);
+      if (entityType === 'mentors') loadAdminMentorMgmtPayload();
+      if (entityType === 'institutions') loadAdminInstMgmtPayload();
+      if (entityType === 'employers') loadAdminEmpMgmtPayload();
+    } else {
+      const data = await res.json();
+      alert("Error: " + (data.detail || "Update failed"));
+    }
+  } catch (err) {
+    console.error(err);
+    alert("Error updating status");
+  }
+}

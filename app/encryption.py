@@ -22,9 +22,9 @@ def _get_fernet_key():
 try:
     _fernet = Fernet(_get_fernet_key())
 except Exception as e:
-    # Safe fallback if key is completely invalid (prevents app crash, but breaks crypto)
-    print(f"WARNING: Invalid Fernet key provided. Encryption will fail. Error: {e}")
-    _fernet = Fernet(Fernet.generate_key())
+    # Fail safely and conspicuously if the key is completely invalid
+    print(f"CRITICAL: Invalid Fernet key provided. Encryption will fail. Error: {e}")
+    raise ValueError(f"Invalid FERNET_KEY configuration: {e}")
 
 
 class EncryptedString(TypeDecorator):

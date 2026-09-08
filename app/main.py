@@ -13,6 +13,10 @@ from sqlalchemy import select
 from .db import Base, engine, get_db
 from .models import (
     User,
+    MentorProfile,
+    InstitutionProfile,
+    InstitutionLearnerLink,
+    EmployerProfile,
     LearnerProfile,
     ContextFactors,
     StudentSkill,
@@ -44,10 +48,23 @@ from .models import (
     SecurityPolicyLog,
     ReadinessProceeding,
     MentorSession,
+    MentorAssignment,
     Session as InterviewSession,
     Question,
     Answer,
     MediaAsset,
+    AdminAuditLog,
+    JobApplication,
+)
+from .auth import (
+    get_password_hash,
+    verify_password,
+    create_access_token,
+    get_current_user_id,
+    require_persona,
+    require_personas,
+    get_current_user,
+    TOKEN_BLOCKLIST
 )
 from .schemas import (
     CreateSessionRequest,
@@ -87,10 +104,15 @@ from .schemas import (
     PlatformMoatResponse,
     ReadinessProceedingResponse,
     HitlQueueItemResponse,
+    MentorAssignmentRequest,
+    AssignedLearnerResponse,
     MentorRosterItemResponse,
     MentorDiagnosticSnapshotResponse,
     InstitutionAnalyticsResponse,
+    InstitutionLearnerLinkRequest,
     EmployerMatchResponse,
+    PendingUserResponse,
+    AdminApprovalRequest,
 )
 from .services.ai_provider import (
     generate_questions,
@@ -135,6 +157,14 @@ async def _broadcast(session_id: int, message: dict):
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="AspireOS ReadyFlow AI Platform")
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
 
 BASE_DIR = Path(__file__).resolve().parent
 ROOT_DIR = BASE_DIR.parent
@@ -304,27 +334,275 @@ async def security_policy_middleware(request: Request, call_next):
     return response
 
 
+
+from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import Response
+from datetime import timedelta
+
+@app.post("/api/auth/register")
+def register_user(payload: dict, db: Session = Depends(get_db)):
+    # Basic registration
+    email = payload.get("email")
+    password = payload.get("password")
+    role = payload.get("role", "Learner")
+    username = payload.get("username", email.split("@")[0] if email else "user")
+    
+    if role in ["Platform Administrator", "AI/Data Reviewer"]:
+        raise HTTPException(status_code=403, detail="Registration for this role is restricted")
+        
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+        
+    hashed_password = get_password_hash(password)
+    
+    # Determine initial status based on role
+    status = "ACTIVE" if role == "Learner" else "PENDING_VERIFICATION"
+    
+    new_user = User(
+        username=username,
+        email=email,
+        password_hash=hashed_password,
+        role=role,
+        personas=role,
+        active_persona=role,
+        status=status,
+        onboarding_completed=False
+    )
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return {"message": "Registration successful", "user_id": new_user.id, "status": status}
+
+import secrets
+import time
+MFA_CODES = {}
+FAILED_LOGINS = {}
+
+@app.post("/api/auth/login")
+def login(response: Response, payload: dict, db: Session = Depends(get_db)):
+    email = payload.get("email")
+    password = payload.get("password")
+    
+    # Check brute-force rate limit
+    now = time.time()
+    login_state = FAILED_LOGINS.get(email, {"count": 0, "locked_until": 0})
+    if login_state["locked_until"] > now:
+        raise HTTPException(status_code=429, detail="Too many failed login attempts. Try again later.")
+    
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not verify_password(password, user.password_hash):
+        # Fallback for old users without passwords during transition
+        if user and not user.password_hash and password == "password":
+            user.password_hash = get_password_hash(password)
+            db.commit()
+        else:
+            login_state["count"] += 1
+            if login_state["count"] >= 5:
+                login_state["locked_until"] = now + 300  # lock for 5 mins
+            FAILED_LOGINS[email] = login_state
+            raise HTTPException(status_code=401, detail="Incorrect email or password")
+            
+    # Reset failed logins on success
+    if email in FAILED_LOGINS:
+        del FAILED_LOGINS[email]
+            
+    if user.status == "LOCKED":
+        raise HTTPException(status_code=423, detail="Account locked")
+        
+    access_token = create_access_token(data={"sub": str(user.id)}, expires_delta=timedelta(days=7))
+    is_prod = os.getenv("APP_ENV", "development") == "production"
+    response.set_cookie(key="session_token", value=access_token, httponly=True, secure=is_prod, max_age=7*24*60*60, samesite="lax")
+    
+    mfa_req = (user.active_persona in ["Platform Administrator", "AI/Data Reviewer"]) or (user.role in ["Platform Administrator", "AI/Data Reviewer"])
+    
+    if mfa_req:
+        code = str(secrets.randbelow(900000) + 100000)
+        MFA_CODES[user.id] = code
+        print(f"--- SECURITY NOTICE: MFA Code for {email} is {code} ---")
+    
+    return {
+        "message": "Login successful", 
+        "mfa_required": mfa_req,
+        "user": {
+            "id": user.id, 
+            "username": user.username,
+            "role": user.active_persona or user.role,
+            "status": user.status,
+            "onboarding_completed": user.onboarding_completed,
+            "personas": user.personas.split(",") if user.personas else [user.role]
+        }
+    }
+
+@app.post("/api/auth/mfa-verify")
+def mfa_verify(payload: dict, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    code = payload.get("code")
+    expected_code = MFA_CODES.get(current_user_id)
+    
+    if not expected_code or code != expected_code:
+        raise HTTPException(status_code=400, detail="Invalid MFA code")
+        
+    # Clear code after use
+    del MFA_CODES[current_user_id]
+    return {"message": "MFA verified"}
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get("session_token")
+    if token:
+        TOKEN_BLOCKLIST.add(token)
+    response.delete_cookie("session_token", httponly=True, samesite="lax")
+    # For extra safety, set it to expire immediately
+    response.set_cookie(key="session_token", value="", max_age=0, httponly=True, samesite="lax")
+    return {"message": "Logout successful"}
+
+@app.post("/api/auth/select-persona")
+def select_persona(payload: dict, current_user: User = Depends(get_current_user), current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    persona = payload.get("persona")
+    personas = current_user.personas.split(",") if current_user.personas else [current_user.role]
+    if persona not in personas:
+        raise HTTPException(status_code=403, detail="Persona not approved")
+    
+    current_user.active_persona = persona
+    db.commit()
+    return {"message": "Persona switched", "active_persona": persona}
+
+
+
+
+@app.post("/api/auth/onboarding/learner", dependencies=[Depends(require_persona('Learner'))])
+def onboarding_learner(payload: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.active_persona != "Learner":
+        raise HTTPException(status_code=403, detail="Not a learner")
+    
+    # Check if LearnerProfile exists
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user.id).first()
+    if not prof:
+        prof = LearnerProfile(user_id=current_user.id)
+        db.add(prof)
+        
+    # Set basic profile data from payload if present (mock fields)
+    if "education" in payload:
+        prof.stream = payload["education"]
+    
+    # Mark onboarding as completed
+    current_user.onboarding_completed = True
+    db.commit()
+    
+    log_readiness_proceeding(db, current_user.id, "Dream", "Learner set dream and purpose statement", {"stream": payload.get("education", "")}, "Attempt baseline diagnostic scorecard.")
+    
+    return {"message": "Learner onboarding completed."}
+
+@app.post("/api/auth/onboarding/mentor", dependencies=[Depends(require_persona('Mentor'))])
+def onboarding_mentor(payload: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.active_persona != "Mentor":
+        raise HTTPException(status_code=403, detail="Not a mentor")
+        
+    profile = MentorProfile(
+        user_id=current_user.id,
+        professional_role=payload.get("professional_role"),
+        expertise=payload.get("expertise"),
+        organization=payload.get("organization"),
+        availability=payload.get("availability")
+    )
+    db.add(profile)
+    current_user.onboarding_completed = True
+    current_user.status = "PENDING_VERIFICATION"
+    db.commit()
+    return {"message": "Onboarding completed. Awaiting verification."}
+
+@app.post("/api/auth/onboarding/institution", dependencies=[Depends(require_persona('Institution'))])
+def onboarding_institution(payload: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.active_persona != "Institution":
+        raise HTTPException(status_code=403, detail="Not an institution")
+        
+    profile = InstitutionProfile(
+        user_id=current_user.id,
+        institution_name=payload.get("institution_name"),
+        organization_type=payload.get("organization_type"),
+        contact_person=payload.get("contact_person"),
+        location=payload.get("location")
+    )
+    db.add(profile)
+    current_user.onboarding_completed = True
+    current_user.status = "PENDING_VERIFICATION"
+    db.commit()
+    return {"message": "Onboarding completed. Awaiting verification."}
+
+@app.post("/api/auth/onboarding/employer", dependencies=[Depends(require_persona('Employer'))])
+def onboarding_employer(payload: dict, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if current_user.active_persona != "Employer":
+        raise HTTPException(status_code=403, detail="Not an employer")
+        
+    profile = EmployerProfile(
+        user_id=current_user.id,
+        company_name=payload.get("company_name"),
+        industry=payload.get("industry"),
+        representative=payload.get("representative"),
+        website=payload.get("website")
+    )
+    db.add(profile)
+    current_user.onboarding_completed = True
+    current_user.status = "PENDING_VERIFICATION"
+    db.commit()
+    return {"message": "Onboarding completed. Awaiting verification."}
+
+# Mock endpoints for MVP features like OTP, MFA, Forgot Password
+@app.post("/api/auth/verify-otp")
+def verify_otp(payload: dict, db: Session = Depends(get_db)):
+    # Dummy MVP implementation
+    email = payload.get("email")
+    if not email:
+        raise HTTPException(status_code=400, detail="Email required")
+    user = db.query(User).filter(User.email == email).first()
+    if user and user.status == "PENDING_OTP":
+        user.status = "ACTIVE"
+        db.commit()
+    return {"message": "OTP Verified"}
+
+@app.post("/api/auth/mfa")
+def mfa_verify(payload: dict):
+    return {"message": "MFA Verified"}
+
+@app.post("/api/auth/forgot-password")
+def forgot_password(payload: dict):
+    return {"message": "Reset link sent"}
+
+@app.post("/api/auth/reset-password")
+def reset_password(payload: dict):
+    return {"message": "Password reset"}
+
 # --- Mock Authentication switcher ---
 
-CURRENT_USER_ID = 1
 
 
 @app.get("/api/auth/current")
-def get_current_user(db: Session = Depends(get_db)):
-    u = db.get(User, CURRENT_USER_ID)
+def get_current_user(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    u = db.get(User, current_user_id)
     if not u:
         u = db.query(User).first()
-    return {"user_id": u.id, "username": u.username, "role": u.role}
+    return {
+        "id": u.id, 
+        "username": u.username, 
+        "role": u.active_persona or u.role,
+        "status": u.status,
+        "onboarding_completed": u.onboarding_completed,
+        "personas": u.personas.split(",") if u.personas else [u.role]
+    }
 
 
 @app.post("/api/auth/role")
-def switch_role(role: str, db: Session = Depends(get_db)):
-    u = db.get(User, CURRENT_USER_ID)
+def switch_role(role: str, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    u = db.get(User, current_user_id)
     if not u:
-        u = db.query(User).first()
-    u.role = role
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    allowed_personas = u.personas.split(",") if u.personas else [u.role]
+    if role not in allowed_personas:
+        raise HTTPException(status_code=403, detail=f"Persona '{role}' is not assigned to this user")
+        
+    u.active_persona = role
     db.commit()
-    return {"username": u.username, "role": u.role}
+    return {"username": u.username, "role": u.active_persona}
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -338,10 +616,10 @@ def health():
 
 
 @app.get("/api/framework")
-def framework_details(db: Session = Depends(get_db)):
+def framework_details(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     base_framework = get_platform_framework()
     # Fetch learner's proceedings
-    proceedings = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID).all()
+    proceedings = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id).all()
     completed_stages = {p.flow_stage: p.created_at for p in proceedings}
     
     for flow in base_framework["universal_flow"]:
@@ -354,13 +632,13 @@ def framework_details(db: Session = Depends(get_db)):
     return base_framework
 
 
-@app.post("/api/readiness/diagnose")
-def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session = Depends(get_db)):
+@app.post("/api/readiness/diagnose", dependencies=[Depends(require_persona('Learner'))])
+def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     # count user credentials for boosts
-    skills_count = db.query(StudentSkill).filter(StudentSkill.learner_id == CURRENT_USER_ID).count()
-    certifications_count = db.query(StudentCertification).filter(StudentCertification.learner_id == CURRENT_USER_ID, StudentCertification.verification_status == "Verified").count()
+    skills_count = db.query(StudentSkill).filter(StudentSkill.learner_id == current_user_id).count()
+    certifications_count = db.query(StudentCertification).filter(StudentCertification.learner_id == current_user_id, StudentCertification.verification_status == "Verified").count()
     
-    links = db.query(StudentLink).filter(StudentLink.learner_id == CURRENT_USER_ID).first()
+    links = db.query(StudentLink).filter(StudentLink.learner_id == current_user_id).first()
     links_count = 0
     if links:
         if links.github_url: links_count += 1
@@ -375,14 +653,14 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
     
     # Save/update diagnostic values in db
     scorecard = diag["scorecard"]
-    existing_sc = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == CURRENT_USER_ID, ReadinessScorecard.assessment_type == "Baseline").first()
+    existing_sc = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == current_user_id, ReadinessScorecard.assessment_type == "Baseline").first()
     
     sc_type = "Baseline"
     if existing_sc:
         sc_type = "Current"
         
     db_scorecard = ReadinessScorecard(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         purpose_clarity=scorecard["dimensions"][0]["score"],
         self_awareness_confidence=scorecard["dimensions"][1]["score"],
         communication_readiness=scorecard["dimensions"][2]["score"],
@@ -404,7 +682,7 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
     db.add(db_scorecard)
     
     # Ingest learning plan into DB if not exists
-    existing_plan = db.query(LearningPlan).filter(LearningPlan.learner_id == CURRENT_USER_ID).first()
+    existing_plan = db.query(LearningPlan).filter(LearningPlan.learner_id == current_user_id).first()
     if not existing_plan:
         plan_dict = []
         for task in diag["development_plan"]["day_30"]:
@@ -415,7 +693,7 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
             plan_dict.append({"task": task, "completed": False})
 
         db_plan = LearningPlan(
-            learner_id=CURRENT_USER_ID,
+            learner_id=current_user_id,
             plan_type="30-60-90 Day Plan",
             weekly_tasks_json=json.dumps(plan_dict),
             status="Active"
@@ -423,15 +701,15 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
         db.add(db_plan)
         db.commit()
 
-        if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Design").count() == 0:
-            log_readiness_proceeding(db, CURRENT_USER_ID, "Design", "Generated active Learning Plan from diagnostics.", {}, "Follow the weekly plan items to improve readiness.")
+        if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id, ReadinessProceeding.flow_stage == "Design").count() == 0:
+            log_readiness_proceeding(db, current_user_id, "Design", "Generated active Learning Plan from diagnostics.", {}, "Follow the weekly plan items to improve readiness.")
 
     db.commit()
 
     # Log to proceedings audit ledger
     log_readiness_proceeding(
         db,
-        CURRENT_USER_ID,
+        current_user_id,
         "Diagnose",
         "Completed comprehensive diagnostic assessment.",
         {"total_score": scorecard["total_score"], "CARI": scorecard["CARI"], "CCQ": scorecard["CCQ"], "resilience_index": scorecard["resilience_index"]},
@@ -439,9 +717,9 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
     )
     
     # Update Learner Profile
-    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first()
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first()
     if not prof:
-        prof = LearnerProfile(user_id=CURRENT_USER_ID)
+        prof = LearnerProfile(user_id=current_user_id)
         db.add(prof)
     
     dp = diag.get("dream_profile", {})
@@ -455,10 +733,10 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
     # Insert Gap Reports
     gaps = diag.get("gaps", [])
     # First, clear old gaps for baseline
-    db.query(GapReport).filter(GapReport.learner_id == CURRENT_USER_ID).delete()
+    db.query(GapReport).filter(GapReport.learner_id == current_user_id).delete()
     for g in gaps:
         db.add(GapReport(
-            learner_id=CURRENT_USER_ID,
+            learner_id=current_user_id,
             gap_type=g.get("gap_type", "Unknown gap"),
             symptoms=g.get("symptoms", ""),
             root_cause=g.get("root_cause", ""),
@@ -469,28 +747,34 @@ def diagnose_readiness_profile(payload: ReadinessDiagnosisRequest, db: Session =
     db.commit()
 
     # Process feedback loops check
-    process_feedback_loop_trigger(db, CURRENT_USER_ID, f"Diagnose: Scorecard evaluated.", scorecard["total_score"])
+    process_feedback_loop_trigger(db, current_user_id, f"Diagnose: Scorecard evaluated.", scorecard["total_score"])
+
+    # Mark user as onboarding completed
+    u = db.get(User, current_user_id)
+    if u:
+        u.onboarding_completed = True
+        db.commit()
 
     return diag
 
 
 # --- ONBOARDING PROFILE & CONTEXT FACTORS ENDPOINTS ---
-@app.get("/api/learner/profile")
-def get_profile(db: Session = Depends(get_db)):
-    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first()
+@app.get("/api/learner/profile", dependencies=[Depends(require_persona('Learner'))])
+def get_profile(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first()
     if not prof:
-        prof = LearnerProfile(user_id=CURRENT_USER_ID)
+        prof = LearnerProfile(user_id=current_user_id)
         db.add(prof)
         db.commit()
         db.refresh(prof)
     return prof
 
 
-@app.post("/api/learner/profile")
-def update_profile(stream: str = Form(...), experience_level: str = Form(...), location: str = Form(...), dream_statement: str = Form(...), purpose_statement: str = Form(...), strengths: str = Form(...), fears: str = Form(...), target_roles: str = Form(...), db: Session = Depends(get_db)):
-    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first()
+@app.post("/api/learner/profile", dependencies=[Depends(require_persona('Learner'))])
+def update_profile(stream: str = Form(...), experience_level: str = Form(...), location: str = Form(...), dream_statement: str = Form(...), purpose_statement: str = Form(...), strengths: str = Form(...), fears: str = Form(...), target_roles: str = Form(...), current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first()
     if not prof:
-        prof = LearnerProfile(user_id=CURRENT_USER_ID)
+        prof = LearnerProfile(user_id=current_user_id)
         db.add(prof)
     prof.stream = stream
     prof.experience_level = experience_level
@@ -505,7 +789,7 @@ def update_profile(stream: str = Form(...), experience_level: str = Form(...), l
     # Log stage transition to Proceedings
     log_readiness_proceeding(
         db, 
-        CURRENT_USER_ID, 
+        current_user_id, 
         "Dream", 
         f"Saved dream statement for {target_roles}.", 
         {"dream": target_roles}, 
@@ -515,22 +799,22 @@ def update_profile(stream: str = Form(...), experience_level: str = Form(...), l
     return {"message": "Profile updated successfully"}
 
 
-@app.get("/api/learner/context")
-def get_context_factors(db: Session = Depends(get_db)):
-    cf = db.query(ContextFactors).filter(ContextFactors.learner_id == CURRENT_USER_ID).first()
+@app.get("/api/learner/context", dependencies=[Depends(require_persona('Learner'))])
+def get_context_factors(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    cf = db.query(ContextFactors).filter(ContextFactors.learner_id == current_user_id).first()
     if not cf:
-        cf = ContextFactors(learner_id=CURRENT_USER_ID)
+        cf = ContextFactors(learner_id=current_user_id)
         db.add(cf)
         db.commit()
         db.refresh(cf)
     return cf
 
 
-@app.post("/api/learner/context")
-def update_context_factors(payload: ContextFactorsRequest, db: Session = Depends(get_db)):
-    cf = db.query(ContextFactors).filter(ContextFactors.learner_id == CURRENT_USER_ID).first()
+@app.post("/api/learner/context", dependencies=[Depends(require_persona('Learner'))])
+def update_context_factors(payload: ContextFactorsRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    cf = db.query(ContextFactors).filter(ContextFactors.learner_id == current_user_id).first()
     if not cf:
-        cf = ContextFactors(learner_id=CURRENT_USER_ID)
+        cf = ContextFactors(learner_id=current_user_id)
         db.add(cf)
     cf.family_pressure = payload.family_pressure
     cf.financial_dependency = payload.financial_dependency
@@ -545,26 +829,27 @@ def update_context_factors(payload: ContextFactorsRequest, db: Session = Depends
 
 
 # --- SKILLS & CREDENTIALS REGISTRY ENDPOINTS ---
-@app.get("/api/learner/skills", response_model=List[StudentSkillResponse])
-def get_learner_skills(db: Session = Depends(get_db)):
+@app.get("/api/learner/skills", response_model=List[StudentSkillResponse], dependencies=[Depends(require_persona('Learner'))])
+def get_learner_skills(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     return (
         db.query(StudentSkill)
-        .filter(StudentSkill.learner_id == CURRENT_USER_ID)
+        .filter(StudentSkill.learner_id == current_user_id)
         .order_by(StudentSkill.id.desc())
         .all()
     )
 
 
-@app.post("/api/learner/skills", response_model=StudentSkillResponse)
+@app.post("/api/learner/skills", response_model=StudentSkillResponse, dependencies=[Depends(require_persona('Learner'))])
 def add_learner_skill(
     payload: StudentSkillRequest,
+    current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     # Prevent duplicate skills for the same learner
     existing_skill = (
         db.query(StudentSkill)
         .filter(
-            StudentSkill.learner_id == CURRENT_USER_ID,
+            StudentSkill.learner_id == current_user_id,
             StudentSkill.name.ilike(payload.name.strip())
         )
         .first()
@@ -574,7 +859,7 @@ def add_learner_skill(
         return existing_skill
 
     skill = StudentSkill(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         name=payload.name.strip(),
         category=payload.category,
         proficiency=payload.proficiency,
@@ -588,16 +873,17 @@ def add_learner_skill(
     return skill
 
 
-@app.delete("/api/learner/skills/{skill_id}")
+@app.delete("/api/learner/skills/{skill_id}", dependencies=[Depends(require_persona('Learner'))])
 def delete_learner_skill(
     skill_id: int,
+    current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     skill = (
         db.query(StudentSkill)
         .filter(
             StudentSkill.id == skill_id,
-            StudentSkill.learner_id == CURRENT_USER_ID
+            StudentSkill.learner_id == current_user_id
         )
         .first()
     )
@@ -616,9 +902,9 @@ def delete_learner_skill(
     }
 
 
-@app.get("/api/learner/certifications", response_model=List[StudentCertificationResponse])
-def get_learner_certifications(db: Session = Depends(get_db)):
-    certs = db.query(StudentCertification).filter(StudentCertification.learner_id == CURRENT_USER_ID).all()
+@app.get("/api/learner/certifications", response_model=List[StudentCertificationResponse], dependencies=[Depends(require_persona('Learner'))])
+def get_learner_certifications(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    certs = db.query(StudentCertification).filter(StudentCertification.learner_id == current_user_id).all()
     results = []
     for cert in certs:
         cert_dict = {
@@ -645,25 +931,40 @@ def get_learner_certifications(db: Session = Depends(get_db)):
     return results
 
 
-@app.post("/api/learner/certifications", response_model=StudentCertificationResponse)
+@app.post("/api/learner/certifications", response_model=StudentCertificationResponse, dependencies=[Depends(require_persona('Learner'))])
 def upload_learner_certification(
     title: str = Form(...),
     issuer: str = Form(...),
     issue_date: str = Form(None),
     credential_id: str = Form(None),
     file: UploadFile = File(None),
+    current_user_id: int = Depends(get_current_user_id),
     db: Session = Depends(get_db)
 ):
     file_url = None
     if file:
+        ALLOWED_EXTENSIONS = {'.pdf', '.png', '.jpg', '.jpeg'}
+        ALLOWED_MIMES = {'application/pdf', 'image/png', 'image/jpeg'}
+        MAX_SIZE = 5 * 1024 * 1024  # 5MB
+        
+        ext = os.path.splitext(file.filename)[1].lower()
+        if ext not in ALLOWED_EXTENSIONS or file.content_type not in ALLOWED_MIMES:
+            raise HTTPException(status_code=400, detail="Invalid file type. Only PDF, PNG, and JPG allowed.")
+            
+        file.file.seek(0, 2)
+        if file.file.tell() > MAX_SIZE:
+            raise HTTPException(status_code=400, detail="File too large. Maximum 5MB.")
+        file.file.seek(0)
+            
+        safe_filename = os.path.basename(file.filename)
         uploads_root = Path(UPLOADS_DIR).resolve()
-        target_path = uploads_root / f"cert-{uuid4().hex}-{file.filename}"
+        target_path = uploads_root / f"cert-{uuid4().hex}-{safe_filename}"
         with open(target_path, "wb") as out:
             shutil.copyfileobj(file.file, out)
         file_url = f"/uploads/{target_path.name}"
 
     cert = StudentCertification(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         title=title,
         issuer=issuer,
         issue_date=issue_date,
@@ -676,7 +977,7 @@ def upload_learner_certification(
     db.refresh(cert)
 
     hitl = HitlReviewQueue(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         reference_id=cert.id,
         task_type="Certification Review",
         flag_reason=cert.title,
@@ -688,22 +989,22 @@ def upload_learner_certification(
     return cert
 
 
-@app.get("/api/learner/links", response_model=StudentLinkResponse)
-def get_learner_links(db: Session = Depends(get_db)):
-    links = db.query(StudentLink).filter(StudentLink.learner_id == CURRENT_USER_ID).first()
+@app.get("/api/learner/links", response_model=StudentLinkResponse, dependencies=[Depends(require_persona('Learner'))])
+def get_learner_links(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    links = db.query(StudentLink).filter(StudentLink.learner_id == current_user_id).first()
     if not links:
-        links = StudentLink(learner_id=CURRENT_USER_ID)
+        links = StudentLink(learner_id=current_user_id)
         db.add(links)
         db.commit()
         db.refresh(links)
     return links
 
 
-@app.post("/api/learner/links", response_model=StudentLinkResponse)
-def update_learner_links(payload: StudentLinkRequest, db: Session = Depends(get_db)):
-    links = db.query(StudentLink).filter(StudentLink.learner_id == CURRENT_USER_ID).first()
+@app.post("/api/learner/links", response_model=StudentLinkResponse, dependencies=[Depends(require_persona('Learner'))])
+def update_learner_links(payload: StudentLinkRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    links = db.query(StudentLink).filter(StudentLink.learner_id == current_user_id).first()
     if not links:
-        links = StudentLink(learner_id=CURRENT_USER_ID)
+        links = StudentLink(learner_id=current_user_id)
         db.add(links)
     links.github_url = payload.github_url
     links.linkedin_url = payload.linkedin_url
@@ -715,8 +1016,8 @@ def update_learner_links(payload: StudentLinkRequest, db: Session = Depends(get_
 
 
 # --- CAREER SHIFT MATRIX ENDPOINT ---
-@app.post("/api/readiness/career-shift", response_model=CareerShiftResponse)
-def calculate_career_shift(payload: CareerShiftRequest, db: Session = Depends(get_db)):
+@app.post("/api/readiness/career-shift", response_model=CareerShiftResponse, dependencies=[Depends(require_persona('Learner'))])
+def calculate_career_shift(payload: CareerShiftRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     # simple transferable skill logic mapping shift pathway
     reason = payload.shift_reason.lower()
     gaps = ["Lack of stream-specific projects", "No industry internships"]
@@ -732,15 +1033,12 @@ def calculate_career_shift(payload: CareerShiftRequest, db: Session = Depends(ge
 
     # save in career shift matrix
     matrix = CareerShiftMatrix(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         shift_reason=payload.shift_reason,
         capability_delta_json=json.dumps({"gaps": gaps, "transferable": transferable})
     )
     db.add(matrix)
     db.commit()
-
-    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Discover").count() == 0:
-        log_readiness_proceeding(db, CURRENT_USER_ID, "Discover", "Calculated career capability delta for shift.", {"gaps": gaps}, "Review identified gaps and begin learning.")
 
     return CareerShiftResponse(
         transferable_skills=transferable,
@@ -749,15 +1047,75 @@ def calculate_career_shift(payload: CareerShiftRequest, db: Session = Depends(ge
         reason=payload.shift_reason
     )
 
+@app.post("/api/readiness/career-shift/confirm", dependencies=[Depends(require_persona('Learner'))])
+def confirm_career_shift(payload: dict, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    target_role = payload.get("target_role")
+    shift_reason = payload.get("shift_reason")
+    if not target_role:
+        raise HTTPException(status_code=400, detail="Target role is required")
+        
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first()
+    if not prof:
+        raise HTTPException(status_code=404, detail="Learner profile not found")
+    
+    prof.target_roles = target_role
+    db.commit()
+
+    new_gap = GapReport(
+        learner_id=current_user_id,
+        gap_type="Career Shift Gap",
+        symptoms=f"Shifting to {target_role} requires new specialized skills.",
+        root_cause=shift_reason,
+        severity="High",
+        recommended_fix=f"Focus on core competencies for {target_role}.",
+        evidence_required="Updated portfolio projects"
+    )
+    db.add(new_gap)
+    db.commit()
+
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id, ReadinessProceeding.flow_stage == "Discover").count() == 0:
+        log_readiness_proceeding(db, current_user_id, "Discover", f"Confirmed career shift to {target_role}.", {"target_role": target_role}, "Review identified gaps and begin learning.")
+
+    existing_plan = db.query(LearningPlan).filter(LearningPlan.learner_id == current_user_id).first()
+    gaps_from_db = db.query(GapReport).filter(GapReport.learner_id == current_user_id).all()
+    
+    gaps_for_plan = [{"gap_type": g.gap_type, "practice_task": g.recommended_fix} for g in gaps_from_db]
+    from app.services.readiness_engine import _learning_plan
+    
+    new_plan_data = _learning_plan(gaps_for_plan, {"recommended_learning": [f"Study basics of {target_role}"], "proof_of_readiness": [f"Build a {target_role} specific project"]})
+    
+    plan_dict = []
+    for task in new_plan_data["day_30"]: plan_dict.append({"task": task, "completed": False})
+    for task in new_plan_data["day_60"]: plan_dict.append({"task": task, "completed": False})
+    for task in new_plan_data["day_90"]: plan_dict.append({"task": task, "completed": False})
+
+    if existing_plan:
+        existing_plan.weekly_tasks_json = json.dumps(plan_dict)
+    else:
+        db_plan = LearningPlan(
+            learner_id=current_user_id,
+            plan_type="30-60-90 Day Plan",
+            weekly_tasks_json=json.dumps(plan_dict),
+            status="Active"
+        )
+        db.add(db_plan)
+    
+    db.commit()
+
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id, ReadinessProceeding.flow_stage == "Design").count() == 0:
+        log_readiness_proceeding(db, current_user_id, "Design", "Generated active Learning Plan for new career path.", {}, "Follow the weekly plan items to improve readiness.")
+
+    return {"status": "success", "target_role": target_role}
+
 
 # --- 1-on-1 MENTORSHIP BOOKINGS ENDPOINTS ---
-@app.get("/api/mentorship/appointments", response_model=List[MentorshipSessionResponse])
-def get_mentorship_appointments(db: Session = Depends(get_db)):
-    return db.query(MentorSession).filter(MentorSession.learner_id == CURRENT_USER_ID).all()
+@app.get("/api/mentorship/appointments", response_model=List[MentorshipSessionResponse], dependencies=[Depends(require_persona('Learner'))])
+def get_mentorship_appointments(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    return db.query(MentorSession).filter(MentorSession.learner_id == current_user_id).all()
 
 
-@app.post("/api/mentorship/appointments", response_model=MentorshipSessionResponse)
-def book_mentorship_appointment(payload: MentorshipBookRequest, db: Session = Depends(get_db)):
+@app.post("/api/mentorship/appointments", response_model=MentorshipSessionResponse, dependencies=[Depends(require_persona('Learner'))])
+def book_mentorship_appointment(payload: MentorshipBookRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     meeting_type = payload.meeting_type or "Google Meet"
     
     if meeting_type == "Google Meet":
@@ -778,7 +1136,7 @@ def book_mentorship_appointment(payload: MentorshipBookRequest, db: Session = De
         meet_url = f"/demo/mentorship/{meeting_id}"
 
     session = MentorSession(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         mentor_name=payload.mentor_name,
         date_str=payload.date_str,
         time_str=payload.time_str,
@@ -792,15 +1150,15 @@ def book_mentorship_appointment(payload: MentorshipBookRequest, db: Session = De
     db.commit()
     db.refresh(session)
 
-    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Adopt").count() == 0:
-        log_readiness_proceeding(db, CURRENT_USER_ID, "Adopt", f"Booked 1-on-1 mentorship session with {payload.mentor_name}.", {"mentor": payload.mentor_name}, "Prepare your questions for the mentorship session.")
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id, ReadinessProceeding.flow_stage == "Adopt").count() == 0:
+        log_readiness_proceeding(db, current_user_id, "Adopt", f"Booked 1-on-1 mentorship session with {payload.mentor_name}.", {"mentor": payload.mentor_name}, "Prepare your questions for the mentorship session.")
 
     return session
 
 
-@app.put("/api/mentorship/appointments/{appointment_id}", response_model=MentorshipSessionResponse)
-def update_mentorship_appointment(appointment_id: int, payload: MentorshipUpdateRequest, db: Session = Depends(get_db)):
-    session = db.query(MentorSession).filter(MentorSession.id == appointment_id, MentorSession.learner_id == CURRENT_USER_ID).first()
+@app.put("/api/mentorship/appointments/{appointment_id}", response_model=MentorshipSessionResponse, dependencies=[Depends(require_persona('Learner'))])
+def update_mentorship_appointment(appointment_id: int, payload: MentorshipUpdateRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    session = db.query(MentorSession).filter(MentorSession.id == appointment_id, MentorSession.learner_id == current_user_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Appointment not found")
 
@@ -836,7 +1194,7 @@ def update_mentorship_appointment(appointment_id: int, payload: MentorshipUpdate
 
 
 @app.get("/demo/mentorship/{meeting_id}", response_class=HTMLResponse)
-def demo_mentorship_meeting(meeting_id: str, db: Session = Depends(get_db)):
+def demo_mentorship_meeting(meeting_id: str, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     # Lookup by meeting_id first, then fallback to meet_url matching
     session = db.query(MentorSession).filter(MentorSession.meeting_id == meeting_id).first()
     if not session:
@@ -966,7 +1324,7 @@ def demo_mentorship_meeting(meeting_id: str, db: Session = Depends(get_db)):
 
 # --- CAMPUS COURSES & COUPONS ENDPOINTS ---
 @app.get("/api/courses/campus")
-def get_campus_courses(db: Session = Depends(get_db)):
+def get_campus_courses(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     courses = db.query(CampusCourse).all()
     results = []
     for c in courses:
@@ -984,7 +1342,7 @@ def get_campus_courses(db: Session = Depends(get_db)):
     return results
 
 
-@app.post("/api/courses/{course_id}/enroll")
+@app.post("/api/courses/{course_id}/enroll", dependencies=[Depends(require_persona('Learner'))])
 def enroll_campus_course(
     course_id: int,
     db: Session = Depends(get_db)
@@ -998,7 +1356,7 @@ def enroll_campus_course(
     existing = (
         db.query(LmsEnrollment)
         .filter(
-            LmsEnrollment.learner_id == CURRENT_USER_ID,
+            LmsEnrollment.learner_id == current_user_id,
             LmsEnrollment.course_id == course_id
         )
         .first()
@@ -1012,7 +1370,7 @@ def enroll_campus_course(
         }
 
     enrollment = LmsEnrollment(
-        learner_id=CURRENT_USER_ID,
+        learner_id=current_user_id,
         course_id=course_id,
         progress_percent=0,
         completed_lectures_json="[]"
@@ -1029,7 +1387,7 @@ def enroll_campus_course(
     }
 
 
-@app.post("/api/courses/{course_id}/payment")
+@app.post("/api/courses/{course_id}/payment", dependencies=[Depends(require_persona('Learner'))])
 def process_dummy_payment(
     course_id: int,
     db: Session = Depends(get_db)
@@ -1052,21 +1410,24 @@ def process_dummy_payment(
     return {
         "success": True,
         "payment_status": "SUCCESS",
-        "payment_id": f"DEMO-PAY-{course_id}-{CURRENT_USER_ID}",
+        "payment_id": f"DEMO-PAY-{course_id}-{current_user_id}",
         "message": "Demo payment successful."
     }
 
 # --- EXISTING JOBS AGGREGATOR ENDPOINTS ---
 @app.get("/api/jobs", response_model=List[JobSearchResponse])
-def get_jobs(db: Session = Depends(get_db)):
+def get_jobs(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     jobs = db.query(ExistingJob).all()
 
     # Get the current student's skills
     student_skills = (
         db.query(StudentSkill)
-        .filter(StudentSkill.learner_id == CURRENT_USER_ID)
+        .filter(StudentSkill.learner_id == current_user_id)
         .all()
     )
+    
+    prof = db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first()
+    target_role = prof.target_roles.lower() if prof and prof.target_roles else ""
 
     # Normalize student skill names
     student_skill_names = {
@@ -1104,6 +1465,10 @@ def get_jobs(db: Session = Depends(get_db)):
             )
         else:
             match_score = 0
+            
+        if target_role and (target_role in j.title.lower() or any(target_role in rs.lower() for rs in required_skills)):
+            match_score += 20
+            match_score = min(match_score, 100)
 
         results.append(
             JobSearchResponse(
@@ -1128,30 +1493,30 @@ def get_jobs(db: Session = Depends(get_db)):
     return results
 
 
-@app.post("/api/jobs/{job_id}/apply")
-def apply_to_job(job_id: int, db: Session = Depends(get_db)):
+@app.post("/api/jobs/{job_id}/apply", dependencies=[Depends(require_persona('Learner'))])
+def apply_to_job(job_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     from .models import JobApplication
     job = db.query(ExistingJob).filter(ExistingJob.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    existing_app = db.query(JobApplication).filter(JobApplication.learner_id == CURRENT_USER_ID, JobApplication.job_id == job_id).first()
+    existing_app = db.query(JobApplication).filter(JobApplication.learner_id == current_user_id, JobApplication.job_id == job_id).first()
     if existing_app:
         raise HTTPException(status_code=400, detail="Already applied to this job")
         
-    app_record = JobApplication(learner_id=CURRENT_USER_ID, job_id=job_id)
+    app_record = JobApplication(learner_id=current_user_id, job_id=job_id)
     db.add(app_record)
     db.commit()
     
-    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Deploy").count() == 0:
-        log_readiness_proceeding(db, CURRENT_USER_ID, "Deploy", f"Applied to job: {job.title}", {"job_id": job_id}, "Prepare for potential recruiter interviews.")
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id, ReadinessProceeding.flow_stage == "Deploy").count() == 0:
+        log_readiness_proceeding(db, current_user_id, "Deploy", f"Applied to job: {job.title}", {"job_id": job_id}, "Prepare for potential recruiter interviews.")
         
     return {"status": "success", "message": "Applied successfully"}
 
 
 # --- ASPERION INTERNAL LMS ENDPOINTS ---
 @app.get("/api/lms/courses", response_model=List[LmsCourseResponse])
-def get_lms_courses(db: Session = Depends(get_db)):
+def get_lms_courses(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     courses = db.query(LmsCourse).all()
     results = []
     for c in courses:
@@ -1189,19 +1554,19 @@ def get_lms_courses(db: Session = Depends(get_db)):
     return results
 
 
-@app.post("/api/lms/courses/{course_id}/enroll")
-def enroll_lms_course(course_id: int, db: Session = Depends(get_db)):
-    enr = db.query(LmsEnrollment).filter(LmsEnrollment.learner_id == CURRENT_USER_ID, LmsEnrollment.course_id == course_id).first()
+@app.post("/api/lms/courses/{course_id}/enroll", dependencies=[Depends(require_persona('Learner'))])
+def enroll_lms_course(course_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    enr = db.query(LmsEnrollment).filter(LmsEnrollment.learner_id == current_user_id, LmsEnrollment.course_id == course_id).first()
     if not enr:
-        enr = LmsEnrollment(learner_id=CURRENT_USER_ID, course_id=course_id, progress_percent=0, completed_lectures_json="[]")
+        enr = LmsEnrollment(learner_id=current_user_id, course_id=course_id, progress_percent=0, completed_lectures_json="[]")
         db.add(enr)
         db.commit()
     return {"message": "Enrolled"}
 
 
-@app.post("/api/lms/courses/{course_id}/progress")
-def update_lms_progress(course_id: int, lecture_id: int, db: Session = Depends(get_db)):
-    enr = db.query(LmsEnrollment).filter(LmsEnrollment.learner_id == CURRENT_USER_ID, LmsEnrollment.course_id == course_id).first()
+@app.post("/api/lms/courses/{course_id}/progress", dependencies=[Depends(require_persona('Learner'))])
+def update_lms_progress(course_id: int, lecture_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    enr = db.query(LmsEnrollment).filter(LmsEnrollment.learner_id == current_user_id, LmsEnrollment.course_id == course_id).first()
     if not enr:
         raise HTTPException(status_code=400, detail="Not enrolled")
     
@@ -1218,7 +1583,7 @@ def update_lms_progress(course_id: int, lecture_id: int, db: Session = Depends(g
     # Log progress to Proceedings
     log_readiness_proceeding(
         db,
-        CURRENT_USER_ID,
+        current_user_id,
         "Develop",
         f"Completed LMS lecture lesson (Lecture ID: {lecture_id}). Progress: {enr.progress_percent}%.",
         {"lms_progress": enr.progress_percent},
@@ -1228,7 +1593,7 @@ def update_lms_progress(course_id: int, lecture_id: int, db: Session = Depends(g
     # Trigger Closed-loop Feedback
     process_feedback_loop_trigger(
         db, 
-        CURRENT_USER_ID, 
+        current_user_id, 
         f"LMS Lesson Completion: Reached {enr.progress_percent}%", 
         enr.progress_percent
     )
@@ -1237,7 +1602,7 @@ def update_lms_progress(course_id: int, lecture_id: int, db: Session = Depends(g
 
 
 @app.get("/api/lms/courses/{course_id}/posts", response_model=List[LmsCollaborationPostResponse])
-def get_lms_collaboration_posts(course_id: int, db: Session = Depends(get_db)):
+def get_lms_collaboration_posts(course_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     posts = db.query(LmsCollaborationPost).filter(LmsCollaborationPost.course_id == course_id).order_by(LmsCollaborationPost.created_at.desc()).all()
     return [
         LmsCollaborationPostResponse(
@@ -1251,7 +1616,7 @@ def get_lms_collaboration_posts(course_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/lms/courses/{course_id}/posts", response_model=LmsCollaborationPostResponse)
-def create_lms_collaboration_post(course_id: int, payload: LmsPostRequest, db: Session = Depends(get_db)):
+def create_lms_collaboration_post(course_id: int, payload: LmsPostRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     p = LmsCollaborationPost(
         course_id=course_id,
         user_name="Learner_Fresh",
@@ -1269,8 +1634,8 @@ def create_lms_collaboration_post(course_id: int, payload: LmsPostRequest, db: S
 
 
 # --- RAG / CAG / KNOWLEDGE GRAPH API ENDPOINTS ---
-@app.get("/api/rag-cag/status")
-def get_rag_cag_status(db: Session = Depends(get_db)):
+@app.get("/api/rag-cag/status", dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_rag_cag_status(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     from app.services.readiness_engine import rag_cag_metrics
     docs_count = db.query(VectorDocument).count()
     caches_count = db.query(CagCacheRegistry).count()
@@ -1285,8 +1650,8 @@ def get_rag_cag_status(db: Session = Depends(get_db)):
     }
 
 
-@app.get("/api/knowledge-graph")
-def get_knowledge_graph(db: Session = Depends(get_db)):
+@app.get("/api/knowledge-graph", dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_knowledge_graph(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     nodes = db.query(KnowledgeGraphNode).all()
     edges = db.query(KnowledgeGraphEdge).all()
     return {
@@ -1296,17 +1661,17 @@ def get_knowledge_graph(db: Session = Depends(get_db)):
 
 
 # --- SAFETY & RESPONSIBLE AI QUEUES ENDPOINTS ---
-@app.get("/api/safety/feedback-loops", response_model=List[FeedbackLoopResponse])
-def get_feedback_loops(db: Session = Depends(get_db)):
-    return db.query(FeedbackLoop).filter(FeedbackLoop.learner_id == CURRENT_USER_ID).all()
+@app.get("/api/safety/feedback-loops", response_model=List[FeedbackLoopResponse], dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_feedback_loops(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    return db.query(FeedbackLoop).all()
 
 
-@app.get("/api/readiness/proceedings", response_model=List[ReadinessProceedingResponse])
-def get_proceedings_timeline(db: Session = Depends(get_db)):
+@app.get("/api/readiness/proceedings", response_model=List[ReadinessProceedingResponse], dependencies=[Depends(require_persona('Learner'))])
+def get_proceedings_timeline(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     # default entry if empty
-    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID).count() == 0:
+    if db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id).count() == 0:
         db.add(ReadinessProceeding(
-            learner_id=CURRENT_USER_ID,
+            learner_id=current_user_id,
             flow_stage="Dream",
             description="Created profile settings.",
             metrics_snapshot="{}",
@@ -1314,7 +1679,7 @@ def get_proceedings_timeline(db: Session = Depends(get_db)):
         ))
         db.commit()
     
-    procs = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID).order_by(ReadinessProceeding.created_at.desc(), ReadinessProceeding.id.desc()).all()
+    procs = db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id).order_by(ReadinessProceeding.created_at.desc(), ReadinessProceeding.id.desc()).all()
     results = []
     for p in procs:
         results.append(ReadinessProceedingResponse(
@@ -1328,8 +1693,8 @@ def get_proceedings_timeline(db: Session = Depends(get_db)):
     return results
 
 
-@app.get("/api/admin/hitl-queue", response_model=List[HitlQueueItemResponse])
-def get_hitl_queue(db: Session = Depends(get_db)):
+@app.get("/api/admin/hitl-queue", response_model=List[HitlQueueItemResponse], dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_hitl_queue(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     query = db.query(
         HitlReviewQueue.id,
         HitlReviewQueue.learner_id,
@@ -1366,11 +1731,13 @@ def get_hitl_queue(db: Session = Depends(get_db)):
     return result
 
 
-@app.post("/api/admin/hitl-queue/{hitl_id}/resolve")
-def resolve_hitl_task(hitl_id: int, decision: str = Form(...), reviewer_notes: str = Form(...), db: Session = Depends(get_db)):
+@app.post("/api/admin/hitl-queue/{hitl_id}/resolve", dependencies=[Depends(require_persona('Platform Administrator'))])
+def resolve_hitl_task(hitl_id: int, decision: str = Form(...), reviewer_notes: str = Form(...), current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     hitl = db.get(HitlReviewQueue, hitl_id)
     if not hitl:
         raise HTTPException(status_code=404, detail="Task not found")
+        
+    prev_status = hitl.status
     hitl.status = "Resolved"
     hitl.reviewer_notes = reviewer_notes
 
@@ -1384,19 +1751,29 @@ def resolve_hitl_task(hitl_id: int, decision: str = Form(...), reviewer_notes: s
             elif decision == "reject":
                 cert.verification_status = "Rejected"
 
+    audit = AdminAuditLog(
+        admin_id=current_user_id,
+        action=f"HITL Resolve: {decision}",
+        target_entity="HitlReviewQueue",
+        target_id=hitl.id,
+        prev_status=prev_status,
+        new_status="Resolved",
+        notes=reviewer_notes
+    )
+    db.add(audit)
     db.commit()
     return {"message": "Resolved"}
 
 
-@app.get("/api/admin/roster", response_model=List[MentorRosterItemResponse])
-def get_mentor_roster(db: Session = Depends(get_db)):
+@app.get("/api/admin/roster", response_model=List[MentorRosterItemResponse], dependencies=[Depends(require_personas(['Mentor', 'Platform Administrator']))])
+def get_mentor_roster(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     users = db.query(User).filter(User.role == "Learner").all()
     
-    # MVP specific: include CURRENT_USER_ID if they have learner data but aren't currently role="Learner"
-    current_user = db.get(User, CURRENT_USER_ID)
+    # MVP specific: include current_user_id if they have learner data but aren't currently role="Learner"
+    current_user = db.get(User, current_user_id)
     if current_user and current_user.role != "Learner":
-        if db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first():
-            if not any(u.id == CURRENT_USER_ID for u in users):
+        if db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first():
+            if not any(u.id == current_user_id for u in users):
                 users.append(current_user)
     roster = []
     for user in users:
@@ -1418,16 +1795,56 @@ def get_mentor_roster(db: Session = Depends(get_db)):
     return roster
 
 
+@app.post("/api/institution/learners")
+def associate_learner_to_institution(payload: InstitutionLearnerLinkRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    current_user = db.get(User, current_user_id)
+    if not current_user or current_user.role not in ["Institution", "Platform Administrator"]:
+        raise HTTPException(status_code=403, detail="Access denied. Requires Institution or Platform Administrator persona.")
+    
+    learner = db.query(User).filter(User.id == payload.learner_id, User.role == "Learner").first()
+    if not learner:
+        raise HTTPException(status_code=404, detail="Learner not found.")
+
+    existing_link = db.query(InstitutionLearnerLink).filter(
+        InstitutionLearnerLink.institution_id == current_user_id,
+        InstitutionLearnerLink.learner_id == payload.learner_id
+    ).first()
+
+    if existing_link:
+        if existing_link.status != 'ACTIVE':
+            existing_link.status = 'ACTIVE'
+            db.commit()
+            return {"message": "Learner association reactivated successfully."}
+        return {"message": "Learner is already associated with this institution."}
+
+    new_link = InstitutionLearnerLink(
+        institution_id=current_user_id,
+        learner_id=payload.learner_id,
+        status="ACTIVE"
+    )
+    db.add(new_link)
+    db.commit()
+    return {"message": "Learner associated successfully."}
+
 @app.get("/api/institution/analytics", response_model=InstitutionAnalyticsResponse)
-def get_institution_analytics(db: Session = Depends(get_db)):
+def get_institution_analytics(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     import math
 
-    users = db.query(User).filter(User.role == "Learner").all()
-    current_user = db.get(User, CURRENT_USER_ID)
-    if current_user and current_user.role != "Learner":
-        if db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first():
-            if not any(u.id == CURRENT_USER_ID for u in users):
-                users.append(current_user)
+    current_user = db.get(User, current_user_id)
+    if not current_user or current_user.role not in ["Institution", "Platform Administrator"]:
+        raise HTTPException(status_code=403, detail="Access denied. Requires Institution or Platform Administrator persona.")
+
+    if current_user.role == "Platform Administrator":
+        users = db.query(User).filter(User.role == "Learner").all()
+        if current_user and current_user.role != "Learner":
+            if db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first():
+                if not any(u.id == current_user_id for u in users):
+                    users.append(current_user)
+    else:
+        # Institution role
+        linked_learner_ids = db.query(InstitutionLearnerLink.learner_id).filter(InstitutionLearnerLink.institution_id == current_user_id, InstitutionLearnerLink.status == 'ACTIVE').all()
+        linked_ids = [lid[0] for lid in linked_learner_ids]
+        users = db.query(User).filter(User.id.in_(linked_ids), User.role == "Learner").all()
 
     total_scorecards = 0
     ready_count = 0
@@ -1509,13 +1926,20 @@ def get_institution_analytics(db: Session = Depends(get_db)):
     }
 
 
-@app.get("/api/admin/learners/{learner_id}/diagnostics", response_model=MentorDiagnosticSnapshotResponse)
-def get_learner_diagnostics(learner_id: int, db: Session = Depends(get_db)):
+@app.get("/api/admin/learners/{learner_id}/diagnostics", response_model=MentorDiagnosticSnapshotResponse, dependencies=[Depends(require_persona('Mentor'))])
+def get_learner_diagnostics(learner_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     user = db.get(User, learner_id)
     if not user:
         raise HTTPException(status_code=404, detail="Learner not found")
-    if user.role != "Learner" and user.id != CURRENT_USER_ID:
+    if user.role != "Learner" and user.id != current_user_id:
         raise HTTPException(status_code=404, detail="Learner not found")
+
+    # Enforce data isolation: if caller is a Mentor, they must be assigned to this learner
+    current_caller = db.get(User, current_user_id)
+    if current_caller and current_caller.role == "Mentor":
+        assignment = db.query(MentorAssignment).filter(MentorAssignment.mentor_id == current_user_id, MentorAssignment.learner_id == learner_id).first()
+        if not assignment:
+            raise HTTPException(status_code=403, detail="Not authorized to view this learner's data")
 
     profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
     scorecard = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == user.id).order_by(ReadinessScorecard.id.desc()).first()
@@ -1547,23 +1971,77 @@ def get_learner_diagnostics(learner_id: int, db: Session = Depends(get_db)):
 
 
 
-@app.get("/api/admin/security-logs", response_model=List[SecurityPolicyLogResponse])
-def get_security_policy_logs(db: Session = Depends(get_db)):
+@app.get("/api/admin/security-logs", response_model=List[SecurityPolicyLogResponse], dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_security_policy_logs(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     return db.query(SecurityPolicyLog).order_by(SecurityPolicyLog.created_at.desc()).all()
 
 
-@app.get("/api/admin/moat")
-def get_moat_metrics(db: Session = Depends(get_db)):
+@app.get("/api/admin/moat", dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_moat_metrics(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     moats = db.query(PlatformMoat).all()
     return {m.metric_key: m.metric_val for m in moats}
+
+
+@app.get("/api/admin/users/pending", response_model=List[PendingUserResponse], dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_pending_users(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    users = db.query(User).filter(User.status == "PENDING_VERIFICATION").all()
+    return users
+
+
+@app.post("/api/admin/users/{user_id}/approve", dependencies=[Depends(require_persona('Platform Administrator'))])
+def approve_user(user_id: int, payload: AdminApprovalRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    prev_status = user.status
+    user.status = "ACTIVE"
+    
+    audit_log = AdminAuditLog(
+        admin_id=current_user_id,
+        action="Approve User",
+        target_entity="User",
+        target_id=user.id,
+        prev_status=prev_status,
+        new_status="ACTIVE",
+        notes=payload.notes
+    )
+    db.add(audit_log)
+    db.commit()
+    return {"message": "User approved successfully", "user_id": user.id, "status": user.status}
+
+
+@app.post("/api/admin/users/{user_id}/reject", dependencies=[Depends(require_persona('Platform Administrator'))])
+def reject_user(user_id: int, payload: AdminApprovalRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    prev_status = user.status
+    user.status = "REJECTED"
+    
+    audit_log = AdminAuditLog(
+        admin_id=current_user_id,
+        action="Reject User",
+        target_entity="User",
+        target_id=user.id,
+        prev_status=prev_status,
+        new_status="REJECTED",
+        notes=payload.notes
+    )
+    db.add(audit_log)
+    db.commit()
+    return {"message": "User rejected successfully", "user_id": user.id, "status": user.status}
+
+
 
 
 # --- MOCK INTERVIEW SUITE ROUTING LAYERS ---
 from uuid import uuid4
 import shutil
 
-@app.post("/api/sessions", response_model=CreateSessionResponse)
-def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db)):
+@app.post("/api/sessions", response_model=CreateSessionResponse, dependencies=[Depends(require_persona('Learner'))])
+def create_session(payload: CreateSessionRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     interview_session = InterviewSession(
         user_name=payload.user_name.strip(),
         target_role=payload.target_role.strip(),
@@ -1590,8 +2068,8 @@ def create_session(payload: CreateSessionRequest, db: Session = Depends(get_db))
     return CreateSessionResponse(session_id=interview_session.id, question_count=len(questions))
 
 
-@app.get("/api/sessions/{session_id}", response_model=SessionSummary)
-def get_session(session_id: int, db: Session = Depends(get_db)):
+@app.get("/api/sessions/{session_id}", response_model=SessionSummary, dependencies=[Depends(require_persona('Learner'))])
+def get_session(session_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     session_obj = db.get(InterviewSession, session_id)
     if not session_obj:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1605,8 +2083,7 @@ def get_session(session_id: int, db: Session = Depends(get_db)):
     )
 
 
-@app.get("/api/sessions/{session_id}/current-question", response_model=CurrentQuestionResponse)
-def get_current_question(session_id: int, db: Session = Depends(get_db)):
+def _get_current_question(session_id: int, db: Session) -> CurrentQuestionResponse:
     session_obj = db.get(InterviewSession, session_id)
     if not session_obj:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1635,8 +2112,13 @@ def get_current_question(session_id: int, db: Session = Depends(get_db)):
     return CurrentQuestionResponse(completed=True)
 
 
-@app.post("/api/sessions/{session_id}/answers", response_model=SubmitAnswerResponse)
-def submit_answer(session_id: int, payload: SubmitAnswerRequest, db: Session = Depends(get_db)):
+@app.get("/api/sessions/{session_id}/current-question", response_model=CurrentQuestionResponse, dependencies=[Depends(require_persona('Learner'))])
+def get_current_question(session_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    return _get_current_question(session_id, db)
+
+
+@app.post("/api/sessions/{session_id}/answers", response_model=SubmitAnswerResponse, dependencies=[Depends(require_persona('Learner'))])
+def submit_answer(session_id: int, payload: SubmitAnswerRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     session_obj = db.get(InterviewSession, session_id)
     if not session_obj:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1691,10 +2173,12 @@ def submit_answer(session_id: int, payload: SubmitAnswerRequest, db: Session = D
     db.add(answer)
     db.commit()
 
-    next_q = get_current_question(session_id, db)
-    
+    next_q = _get_current_question(session_id, db)
+    if next_q.completed:
+        log_readiness_proceeding(db, current_user_id, "Demonstrate", "Completed mock interview session", {}, "Review feedback and deploy skills.")
+        
     # Process feedback loops check
-    process_feedback_loop_trigger(db, CURRENT_USER_ID, f"Interview Mock Answer submission.", evaluation.score_overall)
+    process_feedback_loop_trigger(db, current_user_id, f"Interview Mock Answer submission.", evaluation.score_overall)
 
     return SubmitAnswerResponse(
         saved=True,
@@ -1724,7 +2208,7 @@ def submit_answer(session_id: int, payload: SubmitAnswerRequest, db: Session = D
     )
 
 
-@app.post("/api/sessions/{session_id}/answers/media", response_model=SubmitAnswerResponse)
+@app.post("/api/sessions/{session_id}/answers/media", response_model=SubmitAnswerResponse, dependencies=[Depends(require_persona('Learner'))])
 def submit_media_answer(
     session_id: int,
     question_id: int = Form(...),
@@ -1847,7 +2331,7 @@ def submit_media_answer(
     )
 
 
-@app.post("/api/sessions/{session_id}/answers/{answer_id}/media/analytics")
+@app.post("/api/sessions/{session_id}/answers/{answer_id}/media/analytics", dependencies=[Depends(require_persona('Learner'))])
 def record_media_analytics(
     session_id: int,
     answer_id: int,
@@ -1915,8 +2399,8 @@ async def websocket_endpoint(websocket: WebSocket, session_id: int):
         return
 
 
-@app.get("/api/sessions/{session_id}/report", response_model=ReportResponse)
-def get_report(session_id: int, db: Session = Depends(get_db)):
+@app.get("/api/sessions/{session_id}/report", response_model=ReportResponse, dependencies=[Depends(require_persona('Learner'))])
+def get_report(session_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
     session_obj = db.get(InterviewSession, session_id)
     if not session_obj:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -2012,8 +2496,8 @@ def get_report(session_id: int, db: Session = Depends(get_db)):
     avg_clarity = round(sum(clarity_scores) / len(clarity_scores)) if clarity_scores else 0
     avg_confidence = round(sum(confidence_scores) / len(confidence_scores)) if confidence_scores else 0
 
-    if session_obj.status == "Completed" and db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == CURRENT_USER_ID, ReadinessProceeding.flow_stage == "Demonstrate").count() == 0:
-        log_readiness_proceeding(db, CURRENT_USER_ID, "Demonstrate", f"Generated Mock Interview report (Score: {avg_overall}).", {"score": avg_overall}, "Review interview feedback and improve.")
+    if session_obj.status == "Completed" and db.query(ReadinessProceeding).filter(ReadinessProceeding.learner_id == current_user_id, ReadinessProceeding.flow_stage == "Demonstrate").count() == 0:
+        log_readiness_proceeding(db, current_user_id, "Demonstrate", f"Generated Mock Interview report (Score: {avg_overall}).", {"score": avg_overall}, "Review interview feedback and improve.")
 
     return ReportResponse(
         session_id=session_obj.id,
@@ -2034,9 +2518,9 @@ def get_report(session_id: int, db: Session = Depends(get_db)):
 
 
 # --- EMPLOYER BOARD ENDPOINTS ---
-@app.get("/api/employer/matches", response_model=List[EmployerMatchResponse])
-def get_employer_matches(db: Session = Depends(get_db)):
-    current_user = db.get(User, CURRENT_USER_ID)
+@app.get("/api/employer/matches", response_model=List[EmployerMatchResponse], dependencies=[Depends(require_persona('Employer'))])
+def get_employer_matches(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    current_user = db.get(User, current_user_id)
     if not current_user or current_user.role not in ["Employer", "Admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to view candidates")
         
@@ -2044,8 +2528,8 @@ def get_employer_matches(db: Session = Depends(get_db)):
     
     # For MVP demo: Include current user if they have a LearnerProfile even if Admin/Employer
     if current_user and current_user.role != "Learner":
-        if db.query(LearnerProfile).filter(LearnerProfile.user_id == CURRENT_USER_ID).first():
-            if not any(u.id == CURRENT_USER_ID for u in learners):
+        if db.query(LearnerProfile).filter(LearnerProfile.user_id == current_user_id).first():
+            if not any(u.id == current_user_id for u in learners):
                 learners.append(current_user)
                 
     jobs = db.query(ExistingJob).all()
@@ -2090,9 +2574,9 @@ def get_employer_matches(db: Session = Depends(get_db)):
     results.sort(key=lambda x: x.armc_score, reverse=True)
     return results
 
-@app.get("/api/employer/portfolio/{learner_id}/download")
-def download_learner_portfolio(learner_id: int, db: Session = Depends(get_db)):
-    current_user = db.get(User, CURRENT_USER_ID)
+@app.get("/api/employer/portfolio/{learner_id}/download", dependencies=[Depends(require_persona('Employer'))])
+def download_learner_portfolio(learner_id: int, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    current_user = db.get(User, current_user_id)
     if not current_user or current_user.role not in ["Employer", "Admin"]:
         raise HTTPException(status_code=403, detail="Not authorized to download portfolio")
         
@@ -2150,3 +2634,204 @@ def download_learner_portfolio(learner_id: int, db: Session = Depends(get_db)):
         "Content-Disposition": f"attachment; filename=candidate_{learner_id}_portfolio.md"
     }
     return Response(content=content, media_type="text/markdown", headers=headers)
+
+
+# ==========================================
+# PHASE 3: REAL PLATFORM ADMIN CONTROL
+# ==========================================
+
+from .schemas import EntityStatusRequest, JobApplicationStatusRequest, AdminAuditLogResponse
+
+# 1. Mentor Management Endpoints
+@app.get("/api/admin/mentors", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_get_mentors(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    mentors = db.query(User).filter(User.role == "Mentor").all()
+    results = []
+    for m in mentors:
+        profile = db.query(MentorProfile).filter(MentorProfile.user_id == m.id).first()
+        results.append({
+            "id": m.id,
+            "username": m.username,
+            "email": m.email,
+            "status": m.status,
+            "expertise": profile.expertise if profile else None,
+            "organization": profile.organization if profile else None
+        })
+    return results
+
+@app.post("/api/admin/mentor-assignments", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_assign_mentor(payload: MentorAssignmentRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    mentor = db.query(User).filter(User.id == payload.mentor_id, User.role == "Mentor", User.status == "ACTIVE").first()
+    if not mentor:
+        raise HTTPException(status_code=400, detail="Invalid or inactive mentor")
+    
+    learner = db.query(User).filter(User.id == payload.learner_id, User.role == "Learner", User.status == "ACTIVE").first()
+    if not learner:
+        raise HTTPException(status_code=400, detail="Invalid or inactive learner")
+
+    existing = db.query(MentorAssignment).filter(MentorAssignment.learner_id == payload.learner_id, MentorAssignment.mentor_id == payload.mentor_id).first()
+    if existing:
+        return {"message": "Assignment already exists"}
+
+    assignment = MentorAssignment(learner_id=payload.learner_id, mentor_id=payload.mentor_id)
+    db.add(assignment)
+    db.commit()
+    
+    # Audit logging
+    log = AdminAuditLog(admin_id=current_user_id, action="Assign Mentor", target_entity="MentorAssignment", target_id=payload.learner_id, details=f"Assigned learner {payload.learner_id} to mentor {payload.mentor_id}")
+    db.add(log)
+    db.commit()
+    return {"message": "Mentor assigned successfully"}
+
+@app.get("/api/mentors/assigned-learners", response_model=List[AssignedLearnerResponse], dependencies=[Depends(require_persona('Mentor'))])
+def get_assigned_learners(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    assignments = db.query(MentorAssignment).filter(MentorAssignment.mentor_id == current_user_id).all()
+    results = []
+    for a in assignments:
+        user = db.get(User, a.learner_id)
+        if not user:
+            continue
+        profile = db.query(LearnerProfile).filter(LearnerProfile.user_id == user.id).first()
+        scorecard = db.query(ReadinessScorecard).filter(ReadinessScorecard.learner_id == user.id).order_by(ReadinessScorecard.id.desc()).first()
+        
+        results.append({
+            "learner_id": user.id,
+            "learner_name": user.username,
+            "stream": profile.stream if profile else None,
+            "target_role": profile.target_roles if profile else None,
+            "readiness_level": scorecard.readiness_level if scorecard else None
+        })
+    return results
+
+@app.post("/api/admin/mentors/{mentor_id}/status", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_update_mentor_status(mentor_id: int, payload: EntityStatusRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == mentor_id, User.role == "Mentor").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Mentor not found")
+    
+    prev_status = user.status
+    user.status = payload.status
+    
+    audit = AdminAuditLog(
+        admin_id=current_user_id,
+        action="Update Mentor Status",
+        target_entity="Mentor",
+        target_id=user.id,
+        prev_status=prev_status,
+        new_status=payload.status,
+        notes=payload.notes
+    )
+    db.add(audit)
+    db.commit()
+    return {"message": "Mentor status updated", "new_status": user.status}
+
+
+# 2. Institution Management Endpoints
+@app.get("/api/admin/institutions", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_get_institutions(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    institutions = db.query(User).filter(User.role == "Institution").all()
+    results = []
+    for i in institutions:
+        profile = db.query(InstitutionProfile).filter(InstitutionProfile.user_id == i.id).first()
+        results.append({
+            "id": i.id,
+            "username": i.username,
+            "email": i.email,
+            "status": i.status,
+            "institution_name": profile.institution_name if profile else None,
+            "location": profile.location if profile else None
+        })
+    return results
+
+@app.post("/api/admin/institutions/{inst_id}/status", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_update_institution_status(inst_id: int, payload: EntityStatusRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == inst_id, User.role == "Institution").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Institution not found")
+    
+    prev_status = user.status
+    user.status = payload.status
+    
+    audit = AdminAuditLog(
+        admin_id=current_user_id,
+        action="Update Institution Status",
+        target_entity="Institution",
+        target_id=user.id,
+        prev_status=prev_status,
+        new_status=payload.status,
+        notes=payload.notes
+    )
+    db.add(audit)
+    db.commit()
+    return {"message": "Institution status updated", "new_status": user.status}
+
+
+# 3. Employer Management Endpoints
+@app.get("/api/admin/employers", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_get_employers(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    employers = db.query(User).filter(User.role == "Employer").all()
+    results = []
+    for e in employers:
+        profile = db.query(EmployerProfile).filter(EmployerProfile.user_id == e.id).first()
+        results.append({
+            "id": e.id,
+            "username": e.username,
+            "email": e.email,
+            "status": e.status,
+            "company_name": profile.company_name if profile else None,
+            "industry": profile.industry if profile else None
+        })
+    return results
+
+@app.post("/api/admin/employers/{emp_id}/status", dependencies=[Depends(require_persona('Platform Administrator'))])
+def admin_update_employer_status(emp_id: int, payload: EntityStatusRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == emp_id, User.role == "Employer").first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Employer not found")
+    
+    prev_status = user.status
+    user.status = payload.status
+    
+    audit = AdminAuditLog(
+        admin_id=current_user_id,
+        action="Update Employer Status",
+        target_entity="Employer",
+        target_id=user.id,
+        prev_status=prev_status,
+        new_status=payload.status,
+        notes=payload.notes
+    )
+    db.add(audit)
+    db.commit()
+    return {"message": "Employer status updated", "new_status": user.status}
+
+
+# 4. Job Application Employer Routes
+@app.post("/api/employers/applications/{app_id}/status", dependencies=[Depends(require_persona('Employer'))])
+def employer_update_application_status(app_id: int, payload: JobApplicationStatusRequest, current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    application = db.get(JobApplication, app_id)
+    if not application:
+        raise HTTPException(status_code=404, detail="Application not found")
+        
+    prev_status = application.status
+    application.status = payload.status
+    
+    audit = AdminAuditLog(
+        admin_id=current_user_id,
+        action="Update Application Status",
+        target_entity="JobApplication",
+        target_id=application.id,
+        prev_status=prev_status,
+        new_status=payload.status,
+        notes=payload.notes
+    )
+    db.add(audit)
+    db.commit()
+    return {"message": "Application status updated", "new_status": application.status}
+
+
+# 5. System Analytics / Audit Logs
+@app.get("/api/admin/audit-logs", response_model=List[AdminAuditLogResponse], dependencies=[Depends(require_persona('Platform Administrator'))])
+def get_audit_logs(current_user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
+    logs = db.query(AdminAuditLog).order_by(AdminAuditLog.id.desc()).all()
+    return logs

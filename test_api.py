@@ -1,4 +1,14 @@
 import requests
 
-r = requests.get('http://127.0.0.1:8000/api/learner/certifications', headers={'x-user-id': '1'})
-print(r.json())
+url = "http://localhost:8000/api/auth/register"
+data = {
+    "email": "testlearner@example.com",
+    "password": "password123",
+    "role": "Learner"
+}
+try:
+    response = requests.post(url, json=data)
+    print("Status:", response.status_code)
+    print("Response:", response.json())
+except Exception as e:
+    print("Error:", str(e))
